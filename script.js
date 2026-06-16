@@ -810,7 +810,7 @@ function selecionarCat(cat) {
 
 function filtrarProdutos() {
   const busca = (document.getElementById("searchInput")?.value || "").toLowerCase();
-  const precoMax = parseFloat(document.getElementById("precoRange")?.value || "500");
+  const precoMax = parseFloat(document.getElementById("precoRange")?.value || "1500");
   const soPromo = document.getElementById("soPromo")?.checked;
 
   let filtrados = PRODUTOS.filter(p => {
