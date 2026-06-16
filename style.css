@@ -3097,10 +3097,33 @@ body.admin-logged .product-card .product-actions {
 
 @media (max-width: 900px) {
   #adminBar {
-    padding: 0 1rem;
+    height: auto !important;
+    flex-direction: column !important;
+    padding: 0.6rem !important;
+    align-items: stretch !important;
+    gap: 0.5rem !important;
+  }
+  .admin-bar-brand {
+    justify-content: center !important;
+    font-size: 1rem !important;
   }
   .admin-bar-stats {
-    display: none; /* Esconde stats no celular para dar espaço aos botões */
+    display: none !important; /* Esconde stats no celular para dar espaço */
+  }
+  .admin-bar-actions {
+    justify-content: flex-start !important;
+    overflow-x: auto !important;
+    padding-bottom: 4px !important;
+    gap: 0.4rem !important;
+    width: 100% !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  .btn-admin-bar {
+    padding: 0.4rem 0.8rem !important;
+    flex-shrink: 0 !important;
+  }
+  body.admin-logged {
+    padding-top: 100px !important; /* Ajusta espaçamento para o topo maior no celular */
   }
 }
 
