@@ -1082,9 +1082,12 @@
     window.isAdminMode = true;
   </script>
   
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="script.js?v=5"></script>
   
   <script>
+    const supabase = window.supabase;
+
     // ==== USUÁRIO E SENHA PADRÃO ====
     const CREDENCIAIS = {
       username: "sapalogyes",
@@ -1173,7 +1176,16 @@
     }
 
     // ==== ADMIN DASHBOARD & STATISTICS ====
-    function initAdminDashboard() {
+    async function initAdminDashboard() {
+      if (typeof showLoader === 'function') showLoader();
+      try {
+        await window.syncSupabaseData();
+      } catch (err) {
+        console.error("Erro ao sincronizar dados do admin no dashboard:", err);
+      } finally {
+        if (typeof hideLoader === 'function') hideLoader();
+      }
+
       const visitas = parseInt(localStorage.getItem("lumiere_visitas") || "0");
       const clicks = parseInt(localStorage.getItem("lumiere_clicks_wa") || "0");
       const conversao = visitas > 0 ? Math.round((clicks / visitas) * 100) : 0;
@@ -1183,12 +1195,13 @@
       document.getElementById("barConversao").textContent = conversao + "%";
       
       // Aplicar dinamicamente ao site carregado
-      aplicarConfiguracoesLoja();
+      if (typeof aplicarConfiguracoesLoja === 'function') aplicarConfiguracoesLoja();
       
       // Setup Drag and Drop
       setupDragAndDrop();
       
       // Registrar observadores para recarregar quando o banco de dados mudar
+      window.removeEventListener("contentChanged", rebindAdminControls);
       window.addEventListener("contentChanged", rebindAdminControls);
       
       rebindAdminControls();
@@ -1357,8 +1370,9 @@
       input.value = ""; // limpa para novos uploads
     }
 
-    function salvarConfiguracoesGerais(e) {
+    async function salvarConfiguracoesGerais(e) {
       e.preventDefault();
+      if (typeof showLoader === 'function') showLoader();
       
       const nome = document.getElementById("configNome").value.trim();
       const whatsapp = document.getElementById("configWhatsapp").value.trim().replace(/\D/g, ''); // apenas números
@@ -1381,33 +1395,64 @@
       const logoSize = document.getElementById("configLogoSize").value;
       const heroTitleSize = document.getElementById("configHeroTitleSize").value;
 
-      localStorage.setItem("lumiere_nome", nome);
-      localStorage.setItem("lumiere_whatsapp", whatsapp);
-      localStorage.setItem("lumiere_instagram", instagram);
-      localStorage.setItem("lumiere_email", email);
-      
-      localStorage.setItem("lumiere_stat_clientes", clientes);
-      localStorage.setItem("lumiere_stat_satisfacao", satisfacao);
-      localStorage.setItem("lumiere_stat_modelos", modelos);
+      try {
+        const { error } = await supabase
+          .from('configuracoes')
+          .update({
+            nome,
+            whatsapp,
+            instagram,
+            email,
+            stat_clientes: clientes,
+            stat_satisfacao: satisfacao,
+            stat_modelos: modelos,
+            hero_title1: heroT1,
+            hero_title2: heroT2,
+            hero_title3: heroT3,
+            hero_sub: heroSub,
+            hero_img: heroImg,
+            color_gold: customGold,
+            color_gold2: customGold2,
+            logo_size: logoSize,
+            hero_title_size: heroTitleSize
+          })
+          .eq('id', 1);
 
-      localStorage.setItem("lumiere_hero_title1", heroT1);
-      localStorage.setItem("lumiere_hero_title2", heroT2);
-      localStorage.setItem("lumiere_hero_title3", heroT3);
-      localStorage.setItem("lumiere_hero_sub", heroSub);
-      localStorage.setItem("lumiere_hero_img", heroImg);
+        if (error) throw error;
 
-      localStorage.setItem("lumiere_color_gold", customGold);
-      localStorage.setItem("lumiere_color_gold2", customGold2);
-      localStorage.setItem("lumiere_logo_size", logoSize);
-      localStorage.setItem("lumiere_hero_title_size", heroTitleSize);
+        localStorage.setItem("lumiere_nome", nome);
+        localStorage.setItem("lumiere_whatsapp", whatsapp);
+        localStorage.setItem("lumiere_instagram", instagram);
+        localStorage.setItem("lumiere_email", email);
+        
+        localStorage.setItem("lumiere_stat_clientes", clientes);
+        localStorage.setItem("lumiere_stat_satisfacao", satisfacao);
+        localStorage.setItem("lumiere_stat_modelos", modelos);
 
-      // Re-atualizar o site local
-      aplicarConfiguracoesLoja();
-      fecharModalConfig();
-      alert("Configurações salvas e aplicadas visualmente com sucesso! ✨");
-      
-      // Recarregar os contadores do Hero
-      if (typeof runStatCounters === 'function') runStatCounters();
+        localStorage.setItem("lumiere_hero_title1", heroT1);
+        localStorage.setItem("lumiere_hero_title2", heroT2);
+        localStorage.setItem("lumiere_hero_title3", heroT3);
+        localStorage.setItem("lumiere_hero_sub", heroSub);
+        localStorage.setItem("lumiere_hero_img", heroImg);
+
+        localStorage.setItem("lumiere_color_gold", customGold);
+        localStorage.setItem("lumiere_color_gold2", customGold2);
+        localStorage.setItem("lumiere_logo_size", logoSize);
+        localStorage.setItem("lumiere_hero_title_size", heroTitleSize);
+
+        // Re-atualizar o site local
+        if (typeof aplicarConfiguracoesLoja === 'function') aplicarConfiguracoesLoja();
+        fecharModalConfig();
+        alert("Configurações salvas e aplicadas visualmente com sucesso! ✨");
+        
+        // Recarregar os contadores do Hero
+        if (typeof runStatCounters === 'function') runStatCounters();
+      } catch (err) {
+        console.error("Erro ao salvar configurações no Supabase:", err);
+        alert("Erro ao salvar configurações no banco de dados. Verifique a conexão.");
+      } finally {
+        if (typeof hideLoader === 'function') hideLoader();
+      }
     }
 
     // ==== MODAL SAPATOS (ADD/EDIT) ====
@@ -1605,11 +1650,11 @@
       urlsTextarea.value = list.join("\n");
     }
 
-    function salvarModalAdmin(e) {
+    async function salvarModalAdmin(e) {
       e.preventDefault();
+      if (typeof showLoader === 'function') showLoader();
       
       const idVal = document.getElementById("prodId").value;
-      const id = idVal ? parseInt(idVal, 10) : Date.now();
       
       const nome = document.getElementById("prodNome").value.trim();
       const categoria = document.getElementById("prodCategoria").value.trim();
@@ -1635,73 +1680,144 @@
         imgs = ["https://images.unsplash.com/photo-1549298916-b41d501d3772?w=900&q=80"];
       }
 
-      const promo = precoOld && precoOld > preco;
+      const promo = !!(precoOld && precoOld > preco);
       let tag = null;
       let tagLabel = null;
-      if (promo) {
+      if (promo && precoOld) {
         tag = "promo";
         const desconto = Math.round((1 - preco / precoOld) * 100);
         tagLabel = `−${desconto}%`;
       }
       
+      let destaque = false;
+      if (idVal) {
+        const numericId = parseInt(idVal, 10);
+        const idx = PRODUTOS.findIndex(x => x.id === numericId);
+        if (idx !== -1) {
+          // Manter estado de destaque original
+          destaque = PRODUTOS[idx].destaque;
+        }
+      }
+      
       const produtoObjeto = {
-        id, nome, categoria, genero, preco, precoOld, desc, tamanhos, cores, material, garantia, peso, imgs, promo, tag, tagLabel,
-        destaque: false
+        nome, categoria, genero, preco, precoOld, desc, tamanhos, cores, material, garantia, peso, imgs, promo, tag, tagLabel, destaque
       };
 
       if (idVal) {
-        const idx = PRODUTOS.findIndex(x => x.id === id);
-        if (idx !== -1) {
-          // Manter estado de destaque original
-          produtoObjeto.destaque = PRODUTOS[idx].destaque;
-          PRODUTOS[idx] = produtoObjeto;
-        }
-      } else {
-        PRODUTOS.push(produtoObjeto);
+        produtoObjeto.id = parseInt(idVal, 10);
       }
-      
-      salvarEAtualizarCatalogo();
-      fecharModalAdmin();
+
+      try {
+        const { data, error } = await supabase
+          .from('produtos')
+          .upsert(produtoObjeto)
+          .select();
+
+        if (error) throw error;
+        if (!data || data.length === 0) throw new Error("Nenhum dado retornado do Supabase.");
+
+        const savedProduct = data[0];
+
+        if (idVal) {
+          const idx = PRODUTOS.findIndex(x => x.id === savedProduct.id);
+          if (idx !== -1) {
+            PRODUTOS[idx] = savedProduct;
+          }
+        } else {
+          PRODUTOS.push(savedProduct);
+        }
+        
+        salvarEAtualizarCatalogo();
+        fecharModalAdmin();
+        alert("Sapato salvo com sucesso no Supabase! 👟");
+      } catch (err) {
+        console.error("Erro ao salvar produto no Supabase:", err);
+        alert("Erro ao salvar produto no banco de dados.");
+      } finally {
+        if (typeof hideLoader === 'function') hideLoader();
+      }
     }
 
-    function deletarProduto(id) {
+    async function deletarProduto(id) {
       if (!confirm("Confirmar exclusão definitiva deste sapato?")) return;
-      PRODUTOS = PRODUTOS.filter(p => p.id !== id);
-      salvarEAtualizarCatalogo();
+      if (typeof showLoader === 'function') showLoader();
+      try {
+        const { error } = await supabase
+          .from('produtos')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
+
+        PRODUTOS = PRODUTOS.filter(p => p.id !== id);
+        window.PRODUTOS = PRODUTOS;
+        salvarEAtualizarCatalogo();
+        alert("Sapato excluído com sucesso! 🗑️");
+      } catch (err) {
+        console.error("Erro ao deletar produto no Supabase:", err);
+        alert("Erro ao deletar produto no banco de dados.");
+      } finally {
+        if (typeof hideLoader === 'function') hideLoader();
+      }
     }
 
     function salvarEAtualizarCatalogo() {
       localStorage.setItem("lumiere_produtos", JSON.stringify(PRODUTOS));
       
       // Recarregar os produtos na tela principal chamando as funções do script.js
-      if (paginaAtual === "home" && typeof renderHome === "function") renderHome();
-      if (paginaAtual === "produtos" && typeof renderProdutos === "function") renderProdutos();
-      if (paginaAtual === "detalhe" && typeof renderDetalhe === "function") renderDetalhe();
+      if (typeof renderHome === "function") renderHome();
+      if (typeof renderProdutos === "function") renderProdutos();
+      if (typeof renderDetalhe === "function") renderDetalhe();
       
       // Atualizar contador do carrinho
       if (typeof atualizarContador === "function") atualizarContador();
     }
 
-    function restaurarPadrao() {
-      if (!confirm("Isso apagará todos os seus sapatos customizados e restaurará os originais. Confirmar?")) return;
-      PRODUTOS = [...PRODUTOS_PADRAO];
-      salvarEAtualizarCatalogo();
+    async function restaurarPadrao() {
+      if (!confirm("Isso apagará todos os seus sapatos customizados e restaurará os originais no Supabase. Confirmar?")) return;
+      if (typeof showLoader === 'function') showLoader();
+      try {
+        const { error: deleteError } = await supabase
+          .from('produtos')
+          .delete()
+          .neq('id', 0);
+
+        if (deleteError) throw deleteError;
+
+        const { error: insertError } = await supabase
+          .from('produtos')
+          .insert(window.PRODUTOS_PADRAO);
+
+        if (insertError) throw insertError;
+
+        PRODUTOS.length = 0;
+        PRODUTOS.push(...window.PRODUTOS_PADRAO);
+        salvarEAtualizarCatalogo();
+        alert("Sapatos originais restaurados com sucesso! 🔄");
+      } catch (err) {
+        console.error("Erro ao restaurar padrões no Supabase:", err);
+        alert("Erro ao restaurar padrões no banco de dados.");
+      } finally {
+        if (typeof hideLoader === 'function') hideLoader();
+      }
     }
 
     // ==== MODAL RANKING ====
-    function abrirModalRanking() {
+    async function abrirModalRanking() {
       const listEl = document.getElementById("rankingList");
       if (!listEl) return;
 
-      const vendas = JSON.parse(localStorage.getItem("lumiere_vendas") || "{}");
-      
-      // Ordenar produtos por quantidade vendida
-      const ordenados = [...PRODUTOS].map(p => {
-        return {
-          ...p,
-          sales: vendas[p.id] || 0
-        };
-      }).sort((a, b) => b.sales - a.sales);
+      if (typeof showLoader === 'function') showLoader();
+      try {
+        await window.syncSupabaseData();
+      } catch (err) {
+        console.error("Erro ao sincronizar dados do ranking:", err);
+      } finally {
+        if (typeof hideLoader === 'function') hideLoader();
+      }
+
+      // Ordenar produtos por quantidade vendida (sales)
+      const ordenados = [...PRODUTOS].sort((a, b) => (b.sales || 0) - (a.sales || 0));
 
       listEl.innerHTML = ordenados.map((p, idx) => `
         <div class="ranking-item">
@@ -1711,7 +1827,7 @@
             <div style="font-weight:600; font-size:1rem; color:var(--fg);">${p.nome}</div>
             <div style="font-size:0.75rem; color:var(--muted);">${p.categoria}</div>
           </div>
-          <div class="ranking-sales">${p.sales} clique${p.sales !== 1 ? 's' : ''}</div>
+          <div class="ranking-sales">${p.sales || 0} clique${(p.sales || 0) !== 1 ? 's' : ''}</div>
         </div>
       `).join("");
 

@@ -1,7 +1,13 @@
 /* =============================================
    LUMIÈRE — SCRIPT.JS
-   Loja de Sapatos Premium (Compiled/Clean version)
+   Loja de Sapatos Premium (Compiled/Clean + Supabase)
    ============================================= */
+
+// ==== CONFIGURAÇÃO DO SUPABASE ====
+const supabaseUrl = "https://ggiiabscngwlqrqdaufd.supabase.co";
+const supabaseKey = "sb_publishable_mzsBserUpdNdOl9u1g-ruw_2roY_UXE";
+const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+window.supabase = supabase; // Exportar globalmente para o admin.html usar
 
 // ==== DADOS DOS PRODUTOS PADRÃO ====
 const PRODUTOS_PADRAO = [
@@ -207,19 +213,9 @@ const PRODUTOS_PADRAO = [
   },
 ];
 
-// Carregar catálogo de produtos do LocalStorage ou usar padrão
 let PRODUTOS = [];
-try {
-  const localData = localStorage.getItem("lumiere_produtos");
-  PRODUTOS = localData ? JSON.parse(localData) : [];
-} catch (e) {
-  PRODUTOS = [];
-}
-
-if (!PRODUTOS || !PRODUTOS.length) {
-  PRODUTOS = [...PRODUTOS_PADRAO];
-  localStorage.setItem("lumiere_produtos", JSON.stringify(PRODUTOS));
-}
+window.PRODUTOS = PRODUTOS; // Exportar globalmente
+window.PRODUTOS_PADRAO = PRODUTOS_PADRAO;
 
 let WHATSAPP_NUMBER = localStorage.getItem("lumiere_whatsapp") || "556899408384";
 
@@ -240,6 +236,75 @@ let tamSelecionado = null;
 let corSelecionada = null;
 let imgAtual = 0;
 let paginaHistorico = [];
+
+// ==== SINCRONIZAÇÃO SUPABASE ====
+async function seedDefaultProducts() {
+  try {
+    const { error } = await supabase.from('produtos').insert(PRODUTOS_PADRAO);
+    if (error) throw error;
+    PRODUTOS.push(...PRODUTOS_PADRAO);
+  } catch (e) {
+    console.error("Erro ao cadastrar sapatos padrão no Supabase:", e);
+  }
+}
+
+async function syncSupabaseData() {
+  try {
+    // 1. Buscar sapatos
+    const { data: prodData, error: prodError } = await supabase
+      .from('produtos')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if (prodError) throw prodError;
+
+    PRODUTOS.length = 0; // Limpar array global
+    if (prodData && prodData.length > 0) {
+      PRODUTOS.push(...prodData);
+    } else {
+      await seedDefaultProducts();
+    }
+
+    // 2. Buscar configurações (ID = 1)
+    const { data: configData, error: configError } = await supabase
+      .from('configuracoes')
+      .select('*')
+      .eq('id', 1)
+      .single();
+
+    if (configError) throw configError;
+
+    if (configData) {
+      localStorage.setItem("lumiere_nome", configData.nome || "Lumière");
+      localStorage.setItem("lumiere_whatsapp", configData.whatsapp || "556899408384");
+      localStorage.setItem("lumiere_instagram", configData.instagram || "@lumiere.shoes");
+      localStorage.setItem("lumiere_email", configData.email || "kaelvorastudios2026@gmail.com");
+      
+      localStorage.setItem("lumiere_stat_clientes", configData.stat_clientes || "2400");
+      localStorage.setItem("lumiere_stat_satisfacao", configData.stat_satisfacao || "98");
+      localStorage.setItem("lumiere_stat_modelos", configData.stat_modelos || "80");
+
+      localStorage.setItem("lumiere_hero_title1", configData.hero_title1 || "O Sapato");
+      localStorage.setItem("lumiere_hero_title2", configData.hero_title2 || "Perfeito");
+      localStorage.setItem("lumiere_hero_title3", configData.hero_title3 || "Para Você.");
+      localStorage.setItem("lumiere_hero_sub", configData.hero_sub || "Modelos exclusivos selecionados para quem não abre mão de estilo, conforto e atitude.");
+      localStorage.setItem("lumiere_hero_img", configData.hero_img || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&q=90");
+
+      localStorage.setItem("lumiere_color_gold", configData.color_gold || "#c9a84c");
+      localStorage.setItem("lumiere_color_gold2", configData.color_gold2 || "#e8c96b");
+      localStorage.setItem("lumiere_logo_size", configData.logo_size || "1.8");
+      localStorage.setItem("lumiere_hero_title_size", configData.hero_title_size || "5.5");
+
+      localStorage.setItem("lumiere_visitas", (configData.visitas || 0).toString());
+      localStorage.setItem("lumiere_clicks_wa", (configData.clicks_wa || 0).toString());
+      
+      WHATSAPP_NUMBER = configData.whatsapp || "556899408384";
+    }
+  } catch (e) {
+    console.error("Erro ao sincronizar com o Supabase:", e);
+  }
+}
+window.syncSupabaseData = syncSupabaseData;
 
 // ==== NAVEGACAO ====
 function navigate(pagina, catFiltro) {
@@ -312,7 +377,6 @@ function showLoader() {
   if (loader) loader.classList.add("active");
 }
 
-// hideLoader
 function hideLoader() {
   const loader = document.getElementById("lumiere-loader");
   if (loader) loader.classList.remove("active");
@@ -471,6 +535,7 @@ function toggleCarrinho() {
   renderDrawerItems();
 }
 
+// abrirCarrinho
 function abrirCarrinho() {
   const drawer = document.getElementById("drawer");
   if (drawer) drawer.classList.add("open");
@@ -530,7 +595,7 @@ function renderDrawerItems() {
 }
 
 // ==== WHATSAPP ====
-function enviarWhatsApp(origem) {
+async function enviarWhatsApp(origem) {
   const nomeEl = document.getElementById(origem === "drawer" ? "drawerNome" : "nomeCliente");
   const errEl = document.getElementById(origem === "drawer" ? "drawerErr" : "carrinhoErr");
   const nome = nomeEl ? nomeEl.value.trim() : "";
@@ -542,25 +607,18 @@ function enviarWhatsApp(origem) {
   }
   if (errEl) errEl.textContent = "";
 
-  // Cliques WhatsApp
-  let clicks = parseInt(localStorage.getItem("lumiere_clicks_wa") || "0");
-  localStorage.setItem("lumiere_clicks_wa", (clicks + 1).toString());
-
-  // Vendas sapatos
-  let vendas = {};
-  try {
-    const localSales = localStorage.getItem("lumiere_vendas");
-    vendas = localSales ? JSON.parse(localSales) : {};
-  } catch (e) {
-    vendas = {};
-  }
-
-  carrinho.forEach(item => {
-    vendas[item.produtoId] = (vendas[item.produtoId] || 0) + item.qty;
-  });
-  localStorage.setItem("lumiere_vendas", JSON.stringify(vendas));
-
   showLoader();
+  try {
+    // Incrementar cliques de WhatsApp no Supabase
+    await supabase.rpc('increment_clicks');
+
+    // Incrementar vendas no Supabase
+    for (const item of carrinho) {
+      await supabase.rpc('increment_product_sales', { prod_id: item.produtoId, qty: item.qty });
+    }
+  } catch (e) {
+    console.error("Erro ao registrar vendas no Supabase:", e);
+  }
 
   let msg = `Olá, meu nome é *${nome}* e gostaria de fazer um pedido:\n\n`;
   carrinho.forEach((i, idx) => {
@@ -1012,13 +1070,18 @@ document.addEventListener("click", (e) => {
 });
 
 // ==== INICIALIZACAO ====
-function init() {
+async function init() {
+  showLoader();
+  await syncSupabaseData();
   aplicarConfiguracoesLoja();
 
   if (!sessionStorage.getItem("lumiere_session_active")) {
     sessionStorage.setItem("lumiere_session_active", "true");
-    let visitas = parseInt(localStorage.getItem("lumiere_visitas") || "0");
-    localStorage.setItem("lumiere_visitas", (visitas + 1).toString());
+    try {
+      await supabase.rpc('increment_visits');
+    } catch (e) {
+      console.error("Erro ao incrementar visitas no Supabase:", e);
+    }
   }
 
   initTheme();
@@ -1041,6 +1104,7 @@ function init() {
   initSwipeBack();
 
   setTimeout(updateAnimatedTabs, 100);
+  hideLoader();
 }
 
 // ==== GESTO DE DESLIZAR PARA VOLTAR NO CELULAR ====
@@ -1309,7 +1373,9 @@ function updateToggleIcons(theme) {
 
 window.toggleTheme = toggleTheme;
 
-document.addEventListener("DOMContentLoaded", init);
+document.addEventListener("DOMContentLoaded", () => {
+  init().catch(err => console.error("Erro na inicializacao:", err));
+});
 
 // ==== MODAIS INSTITUCIONAIS ====
 const INFO_CONTENT = {
