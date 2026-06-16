@@ -1120,36 +1120,12 @@
   </script>
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="script.js?v=6"></script>
+  <script src="script.js?v=8"></script>
   
   <script>
-    const supabase = window.supabase;
+    // Referência ao cliente Supabase criado pelo script.js
+    const _adminSb = window.supabaseClient || null;
 
-    // ==== CONTROLE SEGURO DE LOCALSTORAGE ====
-    const safeStorage = {
-      getItem(key, fallback = "") {
-        try {
-          return localStorage.getItem(key) || fallback;
-        } catch (e) {
-          console.warn("Storage bloqueado/indisponível:", e);
-          return fallback;
-        }
-      },
-      setItem(key, value) {
-        try {
-          localStorage.setItem(key, value);
-        } catch (e) {
-          console.warn("Storage bloqueado/indisponível para salvar:", e);
-        }
-      },
-      removeItem(key) {
-        try {
-          localStorage.removeItem(key);
-        } catch (e) {
-          console.warn("Storage bloqueado/indisponível para remover:", e);
-        }
-      }
-    };
 
     // ==== USUÁRIO E SENHA PADRÃO ====
     const CREDENCIAIS = {
@@ -1459,8 +1435,8 @@
       const heroTitleSize = document.getElementById("configHeroTitleSize").value;
 
       try {
-        if (supabase) {
-          const { error } = await supabase
+        if (_adminSb) {
+          const { error } = await _adminSb
             .from('configuracoes')
             .update({
               nome,
@@ -1763,8 +1739,8 @@
           destaque = PRODUTOS[idx].destaque;
             try {
         let savedProduct = null;
-        if (supabase) {
-          const { data, error } = await supabase
+        if (_adminSb) {
+          const { data, error } = await _adminSb
             .from('produtos')
             .upsert(produtoObjeto)
             .select();
@@ -1807,8 +1783,8 @@
       if (!confirm("Confirmar exclusão definitiva deste sapato?")) return;
       if (typeof showLoader === 'function') showLoader();
       try {
-        if (supabase) {
-          const { error } = await supabase
+        if (_adminSb) {
+          const { error } = await _adminSb
             .from('produtos')
             .delete()
             .eq('id', id);
@@ -1844,15 +1820,15 @@
       if (!confirm("Isso apagará todos os seus sapatos customizados e restaurará os originais. Confirmar?")) return;
       if (typeof showLoader === 'function') showLoader();
       try {
-        if (supabase) {
-          const { error: deleteError } = await supabase
+        if (_adminSb) {
+          const { error: deleteError } = await _adminSb
             .from('produtos')
             .delete()
             .neq('id', 0);
 
           if (deleteError) throw deleteError;
 
-          const { error: insertError } = await supabase
+          const { error: insertError } = await _adminSb
             .from('produtos')
             .insert(window.PRODUTOS_PADRAO);
 
