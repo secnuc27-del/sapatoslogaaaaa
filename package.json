@@ -1,0 +1,12 @@
+{
+  "name": "loja-lumiere",
+  "version": "1.0.0",
+  "description": "Lumière — Sapatos de Luxo",
+  "main": "script.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
