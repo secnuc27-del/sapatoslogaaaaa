@@ -940,6 +940,14 @@
             </div>
           </div>
 
+          <!-- PRODUTO EM DESTAQUE -->
+          <div style="display: flex; gap: 2rem; align-items: center; margin-top: 0.5rem; background: rgba(255,255,255,0.03); padding: 0.8rem; border-radius: 0.5rem; border: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <input type="checkbox" id="prodDestaque" style="width: 1.1rem; height: 1.1rem; cursor: pointer; accent-color: var(--gold);" />
+              <label for="prodDestaque" style="font-weight: 500; font-size: 0.85rem; color: var(--fg); cursor: pointer;">Destacar na Página Inicial (Exibir na Home)</label>
+            </div>
+          </div>
+
           <!-- UPLOAD DE FOTOS DA GALERIA DO CELULAR OU URL -->
           <div class="form-group-admin" style="margin-top: 0.5rem;">
             <label class="admin-label">Imagens/Vídeos do Produto (Selecione da Galeria/Arquivos ou arraste aqui)</label>
@@ -1501,6 +1509,7 @@
       document.getElementById("adminForm").reset();
       document.getElementById("prodId").value = "";
       document.getElementById("imagePreviews").innerHTML = "";
+      document.getElementById("prodDestaque").checked = false;
       
       document.getElementById("adminModalTitle").textContent = "Adicionar Sapato";
       document.getElementById("adminModalEyebrow").textContent = "NOVO CADASTRO";
@@ -1529,6 +1538,7 @@
       document.getElementById("prodMaterial").value = p.material;
       document.getElementById("prodGarantia").value = p.garantia;
       document.getElementById("prodPeso").value = p.peso;
+      document.getElementById("prodDestaque").checked = !!p.destaque;
       
       // Limpar e carregar fotos previews
       const previews = document.getElementById("imagePreviews");
@@ -1729,13 +1739,8 @@
         tagLabel = `−${desconto}%`;
       }
       
-      // Manter estado de destaque original se editando
-      let destaque = false;
-      if (idVal) {
-        const numericId = parseInt(idVal, 10);
-        const existente = PRODUTOS.find(x => x.id === numericId);
-        if (existente) destaque = existente.destaque;
-      }
+      // Ler estado de destaque diretamente do checkbox
+      const destaque = document.getElementById("prodDestaque").checked;
 
       const produtoObjeto = {
         nome, categoria, genero, preco, precoOld, desc,
@@ -1746,10 +1751,14 @@
       // Sempre salva localmente primeiro (garantia)
       let savedProduct = null;
       if (idVal) {
-        savedProduct = { ...produtoObjeto, id: parseInt(idVal, 10) };
+        // Preserva o contador de cliques/vendas se houver
+        const numericId = parseInt(idVal, 10);
+        const existente = PRODUTOS.find(x => x.id === numericId);
+        const salesCount = existente ? (existente.sales || 0) : 0;
+        savedProduct = { ...produtoObjeto, id: numericId, sales: salesCount, _dirty: true };
       } else {
         const maxId = PRODUTOS.reduce((max, p) => p.id > max ? p.id : max, 0);
-        savedProduct = { ...produtoObjeto, id: maxId + 1 };
+        savedProduct = { ...produtoObjeto, id: maxId + 1, _dirty: true };
       }
 
       // Atualiza array local
@@ -1772,8 +1781,21 @@
 
       // Tenta sincronizar com Supabase em background (não bloqueia)
       if (_adminSb) {
-        _adminSb.from('produtos').upsert(savedProduct)
-          .then(({ error }) => { if (error) console.warn("Supabase sync falhou:", error.message); })
+        const { _dirty, ...cleanProduct } = savedProduct;
+        _adminSb.from('produtos').upsert(cleanProduct)
+          .then(({ error }) => { 
+            if (!error) {
+              // Limpar flag _dirty localmente e salvar
+              const idx = PRODUTOS.findIndex(x => x.id === savedProduct.id);
+              if (idx !== -1) {
+                delete PRODUTOS[idx]._dirty;
+                safeStorage.setItem("lumiere_produtos", JSON.stringify(PRODUTOS));
+              }
+              console.log("Supabase synced product successfully:", savedProduct.id);
+            } else {
+              console.warn("Supabase sync falhou:", error.message);
+            }
+          })
           .catch(e => console.warn("Supabase sync erro:", e));
       }
     }
@@ -1782,13 +1804,26 @@
       if (!confirm("Confirmar exclusão definitiva deste sapato?")) return;
       if (typeof showLoader === 'function') showLoader();
       try {
+        let deletedOnDb = false;
         if (_adminSb) {
           const { error } = await _adminSb
             .from('produtos')
             .delete()
             .eq('id', id);
 
-          if (error) throw error;
+          if (!error) {
+            deletedOnDb = true;
+          } else {
+            console.warn("Supabase delete falhou, guardando exclusão localmente:", error.message);
+          }
+        }
+
+        if (!deletedOnDb) {
+          const pendentes = JSON.parse(safeStorage.getItem("lumiere_deletes_pendentes", "[]"));
+          if (!pendentes.includes(id)) {
+            pendentes.push(id);
+            safeStorage.setItem("lumiere_deletes_pendentes", JSON.stringify(pendentes));
+          }
         }
 
         PRODUTOS = PRODUTOS.filter(p => p.id !== id);
@@ -1796,8 +1831,8 @@
         salvarEAtualizarCatalogo();
         alert("Sapato excluído com sucesso! 🗑️");
       } catch (err) {
-        console.error("Erro ao deletar produto no Supabase:", err);
-        alert("Erro ao deletar produto no banco de dados.");
+        console.error("Erro ao deletar produto:", err);
+        alert("Erro ao deletar produto.");
       } finally {
         if (typeof hideLoader === 'function') hideLoader();
       }

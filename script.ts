@@ -24,6 +24,7 @@ interface Produto {
   peso?: string;
   imgs: string[];
   sales?: number;
+  _dirty?: boolean;
 }
 
 interface CarrinhoItem {
@@ -56,7 +57,7 @@ declare global {
     closeInfoModal?: () => void;
     abrirModalEdit?: (id: number) => void;
     deletarProduto?: (id: number) => void;
-    supabase: any;
+    supabaseClient: any;
     PRODUTOS: Produto[];
     PRODUTOS_PADRAO: Produto[];
     syncSupabaseData: () => Promise<void>;
@@ -97,12 +98,12 @@ const safeStorage = {
 // ==== CONFIGURAÇÃO DO SUPABASE ====
 const supabaseUrl = "https://ggiiabscngwlqrqdaufd.supabase.co";
 const supabaseKey = "sb_publishable_mzsBserUpdNdOl9u1g-ruw_2roY_UXE";
-let supabase: any = null;
+let supabaseClient: any = null;
 
 if (typeof window !== "undefined" && (window as any).supabase) {
   try {
-    supabase = (window as any).supabase.createClient(supabaseUrl, supabaseKey);
-    (window as any).supabase = supabase; // Exportar globalmente para o admin.html usar
+    supabaseClient = (window as any).supabase.createClient(supabaseUrl, supabaseKey);
+    (window as any).supabaseClient = supabaseClient; // Exportar globalmente para o admin.html usar
   } catch (err) {
     console.error("Erro ao criar o cliente Supabase:", err);
   }
@@ -341,7 +342,7 @@ let paginaHistorico: string[] = [];
 // ==== SINCRONIZAÇÃO SUPABASE ====
 async function seedDefaultProducts(): Promise<void> {
   try {
-    const { error } = await supabase.from('produtos').insert(PRODUTOS_PADRAO);
+    const { error } = await supabaseClient.from('produtos').insert(PRODUTOS_PADRAO);
     if (error) throw error;
     PRODUTOS.push(...PRODUTOS_PADRAO);
   } catch (e) {
@@ -350,52 +351,119 @@ async function seedDefaultProducts(): Promise<void> {
 }
 
 async function syncSupabaseData(): Promise<void> {
-  try {
-    if (!supabase) {
-      console.warn("Sem conexão com o Supabase. Carregando dados locais...");
-      const localProd = safeStorage.getItem("lumiere_produtos");
-      PRODUTOS.length = 0;
-      if (localProd) {
-        try {
-          const parsed = JSON.parse(localProd);
-          const produtosFormatados = parsed.map((p: any) => ({
-            ...p,
-            preco: typeof p.preco === "number" ? p.preco : parseFloat(p.preco) || 0,
-            precoOld: p.precoOld ? (typeof p.precoOld === "number" ? p.precoOld : parseFloat(p.precoOld) || null) : null
-          }));
-          PRODUTOS.push(...produtosFormatados);
-        } catch (err) {
-          PRODUTOS.push(...PRODUTOS_PADRAO);
+  // 1. Carrega dados do cache local
+  const localProdStr = safeStorage.getItem("lumiere_produtos");
+  let localProducts: any[] = [];
+  if (localProdStr) {
+    try {
+      localProducts = JSON.parse(localProdStr);
+    } catch(e) {}
+  }
+
+  // 2. Processar ações pendentes com Supabase se conectado
+  if (supabaseClient) {
+    // A. Deletar pendentes
+    const deletesPendentesStr = safeStorage.getItem("lumiere_deletes_pendentes");
+    if (deletesPendentesStr) {
+      try {
+        const deletesPendentes: number[] = JSON.parse(deletesPendentesStr);
+        if (deletesPendentes.length > 0) {
+          const deletadosComSucesso: number[] = [];
+          for (const id of deletesPendentes) {
+            try {
+              const { error } = await supabaseClient.from('produtos').delete().eq('id', id);
+              if (!error) deletadosComSucesso.push(id);
+            } catch (err) {}
+          }
+          const restantes = deletesPendentes.filter(id => !deletadosComSucesso.includes(id));
+          safeStorage.setItem("lumiere_deletes_pendentes", JSON.stringify(restantes));
         }
+      } catch (e) {}
+    }
+
+    // B. Upsert dirty products
+    const dirtyProducts = localProducts.filter((p: any) => p._dirty === true);
+    if (dirtyProducts.length > 0) {
+      for (const p of dirtyProducts) {
+        try {
+          const { _dirty, ...cleanProduct } = p;
+          const { error } = await supabaseClient.from('produtos').upsert(cleanProduct);
+          if (!error) {
+            delete p._dirty;
+          }
+        } catch (err) {}
+      }
+      safeStorage.setItem("lumiere_produtos", JSON.stringify(localProducts));
+    }
+  }
+
+  try {
+    if (!supabaseClient) {
+      console.warn("Sem conexão com o Supabase. Usando cache local...");
+      PRODUTOS.length = 0;
+      if (localProducts.length > 0) {
+        PRODUTOS.push(...localProducts);
       } else {
         PRODUTOS.push(...PRODUTOS_PADRAO);
       }
       return;
     }
 
-    // 1. Buscar sapatos
-    const { data: prodData, error: prodError } = await supabase
+    // 3. Buscar dados de sapatos atualizados do Supabase
+    const { data: prodData, error: prodError } = await supabaseClient
       .from('produtos')
       .select('*')
       .order('id', { ascending: true });
 
     if (prodError) throw prodError;
 
-    PRODUTOS.length = 0; // Limpar array global
+    // 4. Mesclar dados locais não sincronizados com os dados vindos do banco
+    const deletesPendentes: number[] = JSON.parse(safeStorage.getItem("lumiere_deletes_pendentes", "[]"));
+    const mesclados: any[] = [];
+
+    // Primeiro, colocar os dados do banco, exceto se houver local dirty ou deletado pendente
     if (prodData && prodData.length > 0) {
-      const produtosFormatados = prodData.map((p: any) => ({
+      const dbProducts = prodData.map((p: any) => ({
         ...p,
         preco: typeof p.preco === "number" ? p.preco : parseFloat(p.preco) || 0,
         precoOld: p.precoOld ? (typeof p.precoOld === "number" ? p.precoOld : parseFloat(p.precoOld) || null) : null
       }));
-      PRODUTOS.push(...produtosFormatados);
-      safeStorage.setItem("lumiere_produtos", JSON.stringify(produtosFormatados));
-    } else {
-      await seedDefaultProducts();
+
+      for (const pDb of dbProducts) {
+        if (deletesPendentes.includes(pDb.id)) {
+          // Ignorar se está deletado localmente
+          continue;
+        }
+
+        const localCopy = localProducts.find((pl: any) => pl.id === pDb.id);
+        if (localCopy && localCopy._dirty) {
+          // Usar cópia local se estiver modificada e não sincronizada
+          mesclados.push(localCopy);
+        } else {
+          mesclados.push(pDb);
+        }
+      }
     }
 
-    // 2. Buscar configurações (ID = 1)
-    const { data: configData, error: configError } = await supabase
+    // Adicionar produtos locais criados que ainda não estão no banco (dirty)
+    for (const pl of localProducts) {
+      if (pl._dirty && !mesclados.some((m: any) => m.id === pl.id) && !deletesPendentes.includes(pl.id)) {
+        mesclados.push(pl);
+      }
+    }
+
+    PRODUTOS.length = 0;
+    if (mesclados.length > 0) {
+      PRODUTOS.push(...mesclados);
+      safeStorage.setItem("lumiere_produtos", JSON.stringify(mesclados));
+    } else if (prodData && prodData.length === 0 && localProducts.length === 0) {
+      await seedDefaultProducts();
+    } else {
+      PRODUTOS.push(...localProducts);
+    }
+
+    // 5. Buscar configurações da loja
+    const { data: configData, error: configError } = await supabaseClient
       .from('configuracoes')
       .select('*')
       .eq('id', 1)
@@ -429,22 +497,12 @@ async function syncSupabaseData(): Promise<void> {
       
       WHATSAPP_NUMBER = configData.whatsapp || "556899408384";
     }
+
   } catch (e) {
     console.error("Erro ao sincronizar com o Supabase:", e);
-    const localProd = safeStorage.getItem("lumiere_produtos");
     PRODUTOS.length = 0;
-    if (localProd) {
-      try {
-        const parsed = JSON.parse(localProd);
-        const produtosFormatados = parsed.map((p: any) => ({
-          ...p,
-          preco: typeof p.preco === "number" ? p.preco : parseFloat(p.preco) || 0,
-          precoOld: p.precoOld ? (typeof p.precoOld === "number" ? p.precoOld : parseFloat(p.precoOld) || null) : null
-        }));
-        PRODUTOS.push(...produtosFormatados);
-      } catch (err) {
-        PRODUTOS.push(...PRODUTOS_PADRAO);
-      }
+    if (localProducts.length > 0) {
+      PRODUTOS.push(...localProducts);
     } else {
       PRODUTOS.push(...PRODUTOS_PADRAO);
     }
@@ -754,13 +812,13 @@ async function enviarWhatsApp(origem: string): Promise<void> {
 
   showLoader();
   try {
-    if (supabase) {
+    if (supabaseClient) {
       // Incrementar cliques de WhatsApp no Supabase
-      await supabase.rpc('increment_clicks');
+      await supabaseClient.rpc('increment_clicks');
 
       // Incrementar vendas no Supabase
       for (const item of carrinho) {
-        await supabase.rpc('increment_product_sales', { prod_id: item.produtoId, qty: item.qty });
+        await supabaseClient.rpc('increment_product_sales', { prod_id: item.produtoId, qty: item.qty });
       }
     } else {
       let clicks = parseInt(safeStorage.getItem("lumiere_clicks_wa", "0"), 10);
@@ -1313,8 +1371,8 @@ async function init(): Promise<void> {
 
       (async () => {
         try {
-          if (supabase) {
-            await supabase.rpc('increment_visits');
+          if (supabaseClient) {
+            await supabaseClient.rpc('increment_visits');
           } else {
             let v = parseInt(safeStorage.getItem("lumiere_visitas", "0"), 10);
             safeStorage.setItem("lumiere_visitas", (v + 1).toString());

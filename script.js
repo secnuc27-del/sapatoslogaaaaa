@@ -281,30 +281,65 @@ async function seedDefaultProducts() {
 }
 
 async function syncSupabaseData() {
+  // 1. Carrega dados do cache local
+  const localProdStr = safeStorage.getItem("lumiere_produtos");
+  let localProducts = [];
+  if (localProdStr) {
+    try {
+      localProducts = JSON.parse(localProdStr);
+    } catch(e) {}
+  }
+
+  // 2. Processar ações pendentes com Supabase se conectado
+  if (_sbClient) {
+    // A. Deletar pendentes
+    const deletesPendentesStr = safeStorage.getItem("lumiere_deletes_pendentes");
+    if (deletesPendentesStr) {
+      try {
+        const deletesPendentes = JSON.parse(deletesPendentesStr);
+        if (deletesPendentes.length > 0) {
+          const deletadosComSucesso = [];
+          for (const id of deletesPendentes) {
+            try {
+              const { error } = await _sbClient.from('produtos').delete().eq('id', id);
+              if (!error) deletadosComSucesso.push(id);
+            } catch (err) {}
+          }
+          const restantes = deletesPendentes.filter(id => !deletadosComSucesso.includes(id));
+          safeStorage.setItem("lumiere_deletes_pendentes", JSON.stringify(restantes));
+        }
+      } catch (e) {}
+    }
+
+    // B. Upsert dirty products
+    const dirtyProducts = localProducts.filter(p => p._dirty === true);
+    if (dirtyProducts.length > 0) {
+      for (const p of dirtyProducts) {
+        try {
+          const { _dirty, ...cleanProduct } = p;
+          const { error } = await _sbClient.from('produtos').upsert(cleanProduct);
+          if (!error) {
+            delete p._dirty;
+          }
+        } catch (err) {}
+      }
+      safeStorage.setItem("lumiere_produtos", JSON.stringify(localProducts));
+    }
+  }
+
   try {
     if (!_sbClient) {
-      console.warn("Sem conexão com o Supabase. Carregando dados locais...");
-      const localProd = safeStorage.getItem("lumiere_produtos");
+      console.warn("Sem conexão com o Supabase. Usando cache local...");
       PRODUTOS.length = 0;
-      if (localProd) {
-        try {
-          const parsed = JSON.parse(localProd);
-          const produtosFormatados = parsed.map(p => ({
-            ...p,
-            preco: typeof p.preco === "number" ? p.preco : parseFloat(p.preco) || 0,
-            precoOld: p.precoOld ? (typeof p.precoOld === "number" ? p.precoOld : parseFloat(p.precoOld) || null) : null
-          }));
-          PRODUTOS.push(...produtosFormatados);
-        } catch (err) {
-          PRODUTOS.push(...PRODUTOS_PADRAO);
-        }
+      if (localProducts.length > 0) {
+        PRODUTOS.push(...localProducts);
       } else {
         PRODUTOS.push(...PRODUTOS_PADRAO);
       }
       return;
     }
 
-    // 1. Buscar sapatos
+    // 3. Buscar dados de sapatos atualizados do Supabase
     const { data: prodData, error: prodError } = await _sbClient
       .from('produtos')
       .select('*')
@@ -312,20 +347,52 @@ async function syncSupabaseData() {
 
     if (prodError) throw prodError;
 
-    PRODUTOS.length = 0; // Limpar array global
+    // 4. Mesclar dados locais não sincronizados com os dados vindos do banco
+    const deletesPendentes = JSON.parse(safeStorage.getItem("lumiere_deletes_pendentes", "[]"));
+    const mesclados = [];
+
+    // Primeiro, colocar os dados do banco, exceto se houver local dirty ou deletado pendente
     if (prodData && prodData.length > 0) {
-      const produtosFormatados = prodData.map(p => ({
+      const dbProducts = prodData.map(p => ({
         ...p,
         preco: typeof p.preco === "number" ? p.preco : parseFloat(p.preco) || 0,
         precoOld: p.precoOld ? (typeof p.precoOld === "number" ? p.precoOld : parseFloat(p.precoOld) || null) : null
       }));
-      PRODUTOS.push(...produtosFormatados);
-      safeStorage.setItem("lumiere_produtos", JSON.stringify(produtosFormatados));
-    } else {
-      await seedDefaultProducts();
+
+      for (const pDb of dbProducts) {
+        if (deletesPendentes.includes(pDb.id)) {
+          // Ignorar se está deletado localmente
+          continue;
+        }
+
+        const localCopy = localProducts.find(pl => pl.id === pDb.id);
+        if (localCopy && localCopy._dirty) {
+          // Usar cópia local se estiver modificada e não sincronizada
+          mesclados.push(localCopy);
+        } else {
+          mesclados.push(pDb);
+        }
+      }
     }
 
-    // 2. Buscar configurações (ID = 1)
+    // Adicionar produtos locais criados que ainda não estão no banco (dirty)
+    for (const pl of localProducts) {
+      if (pl._dirty && !mesclados.some(m => m.id === pl.id) && !deletesPendentes.includes(pl.id)) {
+        mesclados.push(pl);
+      }
+    }
+
+    PRODUTOS.length = 0;
+    if (mesclados.length > 0) {
+      PRODUTOS.push(...mesclados);
+      safeStorage.setItem("lumiere_produtos", JSON.stringify(mesclados));
+    } else if (prodData && prodData.length === 0 && localProducts.length === 0) {
+      await seedDefaultProducts();
+    } else {
+      PRODUTOS.push(...localProducts);
+    }
+
+    // 5. Buscar configurações da loja
     const { data: configData, error: configError } = await _sbClient
       .from('configuracoes')
       .select('*')
@@ -360,22 +427,12 @@ async function syncSupabaseData() {
       
       WHATSAPP_NUMBER = configData.whatsapp || "556899408384";
     }
+
   } catch (e) {
     console.error("Erro ao sincronizar com o Supabase:", e);
-    const localProd = safeStorage.getItem("lumiere_produtos");
     PRODUTOS.length = 0;
-    if (localProd) {
-      try {
-        const parsed = JSON.parse(localProd);
-        const produtosFormatados = parsed.map(p => ({
-          ...p,
-          preco: typeof p.preco === "number" ? p.preco : parseFloat(p.preco) || 0,
-          precoOld: p.precoOld ? (typeof p.precoOld === "number" ? p.precoOld : parseFloat(p.precoOld) || null) : null
-        }));
-        PRODUTOS.push(...produtosFormatados);
-      } catch (err) {
-        PRODUTOS.push(...PRODUTOS_PADRAO);
-      }
+    if (localProducts.length > 0) {
+      PRODUTOS.push(...localProducts);
     } else {
       PRODUTOS.push(...PRODUTOS_PADRAO);
     }
