@@ -1743,47 +1743,38 @@
         promo, tag, tagLabel, destaque, sales: 0
       };
 
-      try {
-        let savedProduct = null;
+      // Sempre salva localmente primeiro (garantia)
+      let savedProduct = null;
+      if (idVal) {
+        savedProduct = { ...produtoObjeto, id: parseInt(idVal, 10) };
+      } else {
+        const maxId = PRODUTOS.reduce((max, p) => p.id > max ? p.id : max, 0);
+        savedProduct = { ...produtoObjeto, id: maxId + 1 };
+      }
 
-        if (_adminSb) {
-          const { data, error } = await _adminSb
-            .from('produtos')
-            .upsert(idVal ? { ...produtoObjeto, id: parseInt(idVal, 10) } : produtoObjeto)
-            .select();
-
-          if (error) throw error;
-          if (!data || data.length === 0) throw new Error("Nenhum dado retornado do Supabase.");
-          savedProduct = data[0];
-        } else {
-          // Fallback Local
-          if (idVal) {
-            savedProduct = { ...produtoObjeto, id: parseInt(idVal, 10) };
-          } else {
-            const maxId = PRODUTOS.reduce((max, p) => p.id > max ? p.id : max, 0);
-            savedProduct = { ...produtoObjeto, id: maxId + 1 };
-          }
-        }
-
-        if (idVal) {
-          const idx = PRODUTOS.findIndex(x => x.id === savedProduct.id);
-          if (idx !== -1) {
-            PRODUTOS[idx] = savedProduct;
-          } else {
-            PRODUTOS.push(savedProduct);
-          }
+      // Atualiza array local
+      if (idVal) {
+        const idx = PRODUTOS.findIndex(x => x.id === savedProduct.id);
+        if (idx !== -1) {
+          PRODUTOS[idx] = savedProduct;
         } else {
           PRODUTOS.push(savedProduct);
         }
-        
-        salvarEAtualizarCatalogo();
-        fecharModalAdmin();
-        alert("Sapato salvo com sucesso! 👟");
-      } catch (err) {
-        console.error("Erro ao salvar produto:", err);
-        alert("Erro ao salvar produto no banco de dados.");
-      } finally {
-        if (typeof hideLoader === 'function') hideLoader();
+      } else {
+        PRODUTOS.push(savedProduct);
+      }
+
+      // Salva no localStorage e atualiza a tela imediatamente
+      salvarEAtualizarCatalogo();
+      fecharModalAdmin();
+      if (typeof hideLoader === 'function') hideLoader();
+      alert("Sapato salvo com sucesso! 👟");
+
+      // Tenta sincronizar com Supabase em background (não bloqueia)
+      if (_adminSb) {
+        _adminSb.from('produtos').upsert(savedProduct)
+          .then(({ error }) => { if (error) console.warn("Supabase sync falhou:", error.message); })
+          .catch(e => console.warn("Supabase sync erro:", e));
       }
     }
 
