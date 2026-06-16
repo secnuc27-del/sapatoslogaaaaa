@@ -375,9 +375,10 @@ async function syncSupabaseData() {
       }
     }
 
-    // Adicionar produtos locais criados que ainda não estão no banco (dirty)
+    // Adicionar produtos locais que ainda não estão no banco e não foram deletados
     for (const pl of localProducts) {
-      if (pl._dirty && !mesclados.some(m => m.id === pl.id) && !deletesPendentes.includes(pl.id)) {
+      if (!mesclados.some(m => m.id === pl.id) && !deletesPendentes.includes(pl.id)) {
+        pl._dirty = true;
         mesclados.push(pl);
       }
     }
