@@ -71,8 +71,18 @@ declare global {
 // ==== CONFIGURAÇÃO DO SUPABASE ====
 const supabaseUrl = "https://ggiiabscngwlqrqdaufd.supabase.co";
 const supabaseKey = "sb_publishable_mzsBserUpdNdOl9u1g-ruw_2roY_UXE";
-const supabase = (window as any).supabase.createClient(supabaseUrl, supabaseKey);
-window.supabase = supabase; // Exportar globalmente para o admin.html usar
+let supabase: any = null;
+
+if (typeof window !== "undefined" && (window as any).supabase) {
+  try {
+    supabase = (window as any).supabase.createClient(supabaseUrl, supabaseKey);
+    (window as any).supabase = supabase; // Exportar globalmente para o admin.html usar
+  } catch (err) {
+    console.error("Erro ao criar o cliente Supabase:", err);
+  }
+} else {
+  console.warn("Supabase SDK não está carregado. O site funcionará no modo local (offline).");
+}
 
 // ==== DADOS DOS PRODUTOS PADRÃO ====
 const PRODUTOS_PADRAO: Produto[] = [
@@ -315,6 +325,18 @@ async function seedDefaultProducts(): Promise<void> {
 
 async function syncSupabaseData(): Promise<void> {
   try {
+    if (!supabase) {
+      console.warn("Sem conexão com o Supabase. Carregando dados locais...");
+      const localProd = localStorage.getItem("lumiere_produtos");
+      PRODUTOS.length = 0;
+      if (localProd) {
+        PRODUTOS.push(...JSON.parse(localProd));
+      } else {
+        PRODUTOS.push(...PRODUTOS_PADRAO);
+      }
+      return;
+    }
+
     // 1. Buscar sapatos
     const { data: prodData, error: prodError } = await supabase
       .from('produtos')
@@ -326,6 +348,7 @@ async function syncSupabaseData(): Promise<void> {
     PRODUTOS.length = 0; // Limpar array global
     if (prodData && prodData.length > 0) {
       PRODUTOS.push(...prodData);
+      localStorage.setItem("lumiere_produtos", JSON.stringify(prodData));
     } else {
       await seedDefaultProducts();
     }
@@ -367,6 +390,17 @@ async function syncSupabaseData(): Promise<void> {
     }
   } catch (e) {
     console.error("Erro ao sincronizar com o Supabase:", e);
+    const localProd = localStorage.getItem("lumiere_produtos");
+    PRODUTOS.length = 0;
+    if (localProd) {
+      try {
+        PRODUTOS.push(...JSON.parse(localProd));
+      } catch (err) {
+        PRODUTOS.push(...PRODUTOS_PADRAO);
+      }
+    } else {
+      PRODUTOS.push(...PRODUTOS_PADRAO);
+    }
   }
 }
 window.syncSupabaseData = syncSupabaseData;
@@ -673,12 +707,17 @@ async function enviarWhatsApp(origem: string): Promise<void> {
 
   showLoader();
   try {
-    // Incrementar cliques de WhatsApp no Supabase
-    await supabase.rpc('increment_clicks');
+    if (supabase) {
+      // Incrementar cliques de WhatsApp no Supabase
+      await supabase.rpc('increment_clicks');
 
-    // Incrementar vendas no Supabase
-    for (const item of carrinho) {
-      await supabase.rpc('increment_product_sales', { prod_id: item.produtoId, qty: item.qty });
+      // Incrementar vendas no Supabase
+      for (const item of carrinho) {
+        await supabase.rpc('increment_product_sales', { prod_id: item.produtoId, qty: item.qty });
+      }
+    } else {
+      let clicks = parseInt(localStorage.getItem("lumiere_clicks_wa") || "0");
+      localStorage.setItem("lumiere_clicks_wa", (clicks + 1).toString());
     }
   } catch (e) {
     console.error("Erro ao registrar vendas no Supabase:", e);
@@ -1143,7 +1182,12 @@ async function init(): Promise<void> {
   if (!sessionStorage.getItem("lumiere_session_active")) {
     sessionStorage.setItem("lumiere_session_active", "true");
     try {
-      await supabase.rpc('increment_visits');
+      if (supabase) {
+        await supabase.rpc('increment_visits');
+      } else {
+        let v = parseInt(localStorage.getItem("lumiere_visitas") || "0");
+        localStorage.setItem("lumiere_visitas", (v + 1).toString());
+      }
     } catch (e) {
       console.error("Erro ao incrementar visitas no Supabase:", e);
     }
