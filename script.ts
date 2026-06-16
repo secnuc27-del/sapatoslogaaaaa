@@ -68,6 +68,32 @@ declare global {
   }
 }
 
+// ==== CONTROLE SEGURO DE LOCALSTORAGE ====
+const safeStorage = {
+  getItem(key: string, fallback: string = ""): string {
+    try {
+      return localStorage.getItem(key) || fallback;
+    } catch (e) {
+      console.warn("Storage bloqueado/indisponível:", e);
+      return fallback;
+    }
+  },
+  setItem(key: string, value: string): void {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      console.warn("Storage bloqueado/indisponível para salvar:", e);
+    }
+  },
+  removeItem(key: string): void {
+    try {
+      localStorage.removeItem(key);
+    } catch (e) {
+      console.warn("Storage bloqueado/indisponível para remover:", e);
+    }
+  }
+};
+
 // ==== CONFIGURAÇÃO DO SUPABASE ====
 const supabaseUrl = "https://ggiiabscngwlqrqdaufd.supabase.co";
 const supabaseKey = "sb_publishable_mzsBserUpdNdOl9u1g-ruw_2roY_UXE";
@@ -292,12 +318,12 @@ let PRODUTOS: Produto[] = [];
 window.PRODUTOS = PRODUTOS; // Exportar globalmente
 (window as any).PRODUTOS_PADRAO = PRODUTOS_PADRAO;
 
-let WHATSAPP_NUMBER = localStorage.getItem("lumiere_whatsapp") || "556899408384";
+let WHATSAPP_NUMBER = safeStorage.getItem("lumiere_whatsapp", "556899408384");
 
 // ==== ESTADO GLOBAL DA APLICACAO ====
 let carrinho: CarrinhoItem[] = [];
 try {
-  const localCart = localStorage.getItem("lumiere_cart");
+  const localCart = safeStorage.getItem("lumiere_cart");
   carrinho = localCart ? JSON.parse(localCart) : [];
 } catch (e) {
   carrinho = [];
@@ -327,10 +353,20 @@ async function syncSupabaseData(): Promise<void> {
   try {
     if (!supabase) {
       console.warn("Sem conexão com o Supabase. Carregando dados locais...");
-      const localProd = localStorage.getItem("lumiere_produtos");
+      const localProd = safeStorage.getItem("lumiere_produtos");
       PRODUTOS.length = 0;
       if (localProd) {
-        PRODUTOS.push(...JSON.parse(localProd));
+        try {
+          const parsed = JSON.parse(localProd);
+          const produtosFormatados = parsed.map((p: any) => ({
+            ...p,
+            preco: typeof p.preco === "number" ? p.preco : parseFloat(p.preco) || 0,
+            precoOld: p.precoOld ? (typeof p.precoOld === "number" ? p.precoOld : parseFloat(p.precoOld) || null) : null
+          }));
+          PRODUTOS.push(...produtosFormatados);
+        } catch (err) {
+          PRODUTOS.push(...PRODUTOS_PADRAO);
+        }
       } else {
         PRODUTOS.push(...PRODUTOS_PADRAO);
       }
@@ -347,8 +383,13 @@ async function syncSupabaseData(): Promise<void> {
 
     PRODUTOS.length = 0; // Limpar array global
     if (prodData && prodData.length > 0) {
-      PRODUTOS.push(...prodData);
-      localStorage.setItem("lumiere_produtos", JSON.stringify(prodData));
+      const produtosFormatados = prodData.map((p: any) => ({
+        ...p,
+        preco: typeof p.preco === "number" ? p.preco : parseFloat(p.preco) || 0,
+        precoOld: p.precoOld ? (typeof p.precoOld === "number" ? p.precoOld : parseFloat(p.precoOld) || null) : null
+      }));
+      PRODUTOS.push(...produtosFormatados);
+      safeStorage.setItem("lumiere_produtos", JSON.stringify(produtosFormatados));
     } else {
       await seedDefaultProducts();
     }
@@ -363,38 +404,44 @@ async function syncSupabaseData(): Promise<void> {
     if (configError) throw configError;
 
     if (configData) {
-      localStorage.setItem("lumiere_nome", configData.nome || "Lumière");
-      localStorage.setItem("lumiere_whatsapp", configData.whatsapp || "556899408384");
-      localStorage.setItem("lumiere_instagram", configData.instagram || "@lumiere.shoes");
-      localStorage.setItem("lumiere_email", configData.email || "kaelvorastudios2026@gmail.com");
+      safeStorage.setItem("lumiere_nome", configData.nome || "Lumière");
+      safeStorage.setItem("lumiere_whatsapp", configData.whatsapp || "556899408384");
+      safeStorage.setItem("lumiere_instagram", configData.instagram || "@lumiere.shoes");
+      safeStorage.setItem("lumiere_email", configData.email || "kaelvorastudios2026@gmail.com");
       
-      localStorage.setItem("lumiere_stat_clientes", configData.stat_clientes || "2400");
-      localStorage.setItem("lumiere_stat_satisfacao", configData.stat_satisfacao || "98");
-      localStorage.setItem("lumiere_stat_modelos", configData.stat_modelos || "80");
+      safeStorage.setItem("lumiere_stat_clientes", configData.stat_clientes || "2400");
+      safeStorage.setItem("lumiere_stat_satisfacao", configData.stat_satisfacao || "98");
+      safeStorage.setItem("lumiere_stat_modelos", configData.stat_modelos || "80");
 
-      localStorage.setItem("lumiere_hero_title1", configData.hero_title1 || "O Sapato");
-      localStorage.setItem("lumiere_hero_title2", configData.hero_title2 || "Perfeito");
-      localStorage.setItem("lumiere_hero_title3", configData.hero_title3 || "Para Você.");
-      localStorage.setItem("lumiere_hero_sub", configData.hero_sub || "Modelos exclusivos selecionados para quem não abre mão de estilo, conforto e atitude.");
-      localStorage.setItem("lumiere_hero_img", configData.hero_img || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&q=90");
+      safeStorage.setItem("lumiere_hero_title1", configData.hero_title1 || "O Sapato");
+      safeStorage.setItem("lumiere_hero_title2", configData.hero_title2 || "Perfeito");
+      safeStorage.setItem("lumiere_hero_title3", configData.hero_title3 || "Para Você.");
+      safeStorage.setItem("lumiere_hero_sub", configData.hero_sub || "Modelos exclusivos selecionados para quem não abre mão de estilo, conforto e atitude.");
+      safeStorage.setItem("lumiere_hero_img", configData.hero_img || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&q=90");
 
-      localStorage.setItem("lumiere_color_gold", configData.color_gold || "#c9a84c");
-      localStorage.setItem("lumiere_color_gold2", configData.color_gold2 || "#e8c96b");
-      localStorage.setItem("lumiere_logo_size", configData.logo_size || "1.8");
-      localStorage.setItem("lumiere_hero_title_size", configData.hero_title_size || "5.5");
+      safeStorage.setItem("lumiere_color_gold", configData.color_gold || "#c9a84c");
+      safeStorage.setItem("lumiere_color_gold2", configData.color_gold2 || "#e8c96b");
+      safeStorage.setItem("lumiere_logo_size", configData.logo_size || "1.8");
+      safeStorage.setItem("lumiere_hero_title_size", configData.hero_title_size || "5.5");
 
-      localStorage.setItem("lumiere_visitas", (configData.visitas || 0).toString());
-      localStorage.setItem("lumiere_clicks_wa", (configData.clicks_wa || 0).toString());
+      safeStorage.setItem("lumiere_visitas", (configData.visitas || 0).toString());
+      safeStorage.setItem("lumiere_clicks_wa", (configData.clicks_wa || 0).toString());
       
       WHATSAPP_NUMBER = configData.whatsapp || "556899408384";
     }
   } catch (e) {
     console.error("Erro ao sincronizar com o Supabase:", e);
-    const localProd = localStorage.getItem("lumiere_produtos");
+    const localProd = safeStorage.getItem("lumiere_produtos");
     PRODUTOS.length = 0;
     if (localProd) {
       try {
-        PRODUTOS.push(...JSON.parse(localProd));
+        const parsed = JSON.parse(localProd);
+        const produtosFormatados = parsed.map((p: any) => ({
+          ...p,
+          preco: typeof p.preco === "number" ? p.preco : parseFloat(p.preco) || 0,
+          precoOld: p.precoOld ? (typeof p.precoOld === "number" ? p.precoOld : parseFloat(p.precoOld) || null) : null
+        }));
+        PRODUTOS.push(...produtosFormatados);
       } catch (err) {
         PRODUTOS.push(...PRODUTOS_PADRAO);
       }
@@ -530,10 +577,10 @@ function renderMediaHtml(url: string, alt: string = "", classes: string = "", ex
 }
 
 function aplicarEstilosCustomizados(): void {
-  const customGold = localStorage.getItem("lumiere_color_gold") || "#c9a84c";
-  const customGold2 = localStorage.getItem("lumiere_color_gold2") || "#e8c96b";
-  const customLogoSize = localStorage.getItem("lumiere_logo_size") || "1.8";
-  const customHeroTitleSize = localStorage.getItem("lumiere_hero_title_size") || "5.5";
+  const customGold = safeStorage.getItem("lumiere_color_gold", "#c9a84c");
+  const customGold2 = safeStorage.getItem("lumiere_color_gold2", "#e8c96b");
+  const customLogoSize = safeStorage.getItem("lumiere_logo_size", "1.8");
+  const customHeroTitleSize = safeStorage.getItem("lumiere_hero_title_size", "5.5");
 
   let styleEl = document.getElementById("lumiere-custom-theme");
   if (!styleEl) {
@@ -569,7 +616,7 @@ function toggleMenu(): void {
 
 // ==== CARRINHO ====
 function salvarCarrinho(): void {
-  localStorage.setItem("lumiere_cart", JSON.stringify(carrinho));
+  safeStorage.setItem("lumiere_cart", JSON.stringify(carrinho));
   atualizarContador();
 }
 
@@ -716,8 +763,8 @@ async function enviarWhatsApp(origem: string): Promise<void> {
         await supabase.rpc('increment_product_sales', { prod_id: item.produtoId, qty: item.qty });
       }
     } else {
-      let clicks = parseInt(localStorage.getItem("lumiere_clicks_wa") || "0");
-      localStorage.setItem("lumiere_clicks_wa", (clicks + 1).toString());
+      let clicks = parseInt(safeStorage.getItem("lumiere_clicks_wa", "0"), 10);
+      safeStorage.setItem("lumiere_clicks_wa", (clicks + 1).toString());
     }
   } catch (e) {
     console.error("Erro ao registrar vendas no Supabase:", e);
@@ -1048,7 +1095,7 @@ function renderCarrinho(): void {
 // ==== CONFIGURAÇÕES E ANALYTICS DA LOJA ====
 function aplicarConfiguracoesLoja(): void {
   aplicarEstilosCustomizados();
-  const nomeLoja = localStorage.getItem("lumiere_nome") || "Lumière";
+  const nomeLoja = safeStorage.getItem("lumiere_nome", "Lumière");
 
   document.title = `${nomeLoja} — Sapatos de Luxo`;
 
@@ -1069,7 +1116,7 @@ function aplicarConfiguracoesLoja(): void {
     contatoCtaTitle.innerHTML = `${nomeLoja} ✦`;
   }
 
-  const whatsappNum = localStorage.getItem("lumiere_whatsapp") || "556899408384";
+  const whatsappNum = safeStorage.getItem("lumiere_whatsapp", "556899408384");
   document.querySelectorAll("a[href*='wa.me']").forEach(link => {
     try {
       const a = link as HTMLAnchorElement;
@@ -1096,14 +1143,14 @@ function aplicarConfiguracoesLoja(): void {
   const waTextEl = document.getElementById("contactWhatsappText");
   if (waTextEl) waTextEl.textContent = formattedPhone || whatsappNum;
 
-  const instagramUser = localStorage.getItem("lumiere_instagram") || "@lumiere.shoes";
+  const instagramUser = safeStorage.getItem("lumiere_instagram", "@lumiere.shoes");
   const instaEl = document.getElementById("contactInstagram") as HTMLAnchorElement | null;
   if (instaEl) {
     instaEl.textContent = instagramUser;
     instaEl.href = `https://instagram.com/${instagramUser.replace("@", "")}`;
   }
 
-  const emailLoja = localStorage.getItem("lumiere_email") || "kaelvorastudios2026@gmail.com";
+  const emailLoja = safeStorage.getItem("lumiere_email", "kaelvorastudios2026@gmail.com");
   const emailEl = document.getElementById("contactEmail") as HTMLAnchorElement | null;
   if (emailEl) {
     emailEl.textContent = emailLoja;
@@ -1115,11 +1162,11 @@ function aplicarConfiguracoesLoja(): void {
   if (footerEmailLink) footerEmailLink.href = `mailto:${emailLoja}`;
 
   // Capa / Hero
-  const heroT1 = localStorage.getItem("lumiere_hero_title1") || "O Sapato";
-  const heroT2 = localStorage.getItem("lumiere_hero_title2") || "Perfeito";
-  const heroT3 = localStorage.getItem("lumiere_hero_title3") || "Para Você";
-  const heroSub = localStorage.getItem("lumiere_hero_sub") || "Conforto e elegância em cada passo.";
-  const heroImgUrl = localStorage.getItem("lumiere_hero_img") || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&q=90";
+  const heroT1 = safeStorage.getItem("lumiere_hero_title1", "O Sapato");
+  const heroT2 = safeStorage.getItem("lumiere_hero_title2", "Perfeito");
+  const heroT3 = safeStorage.getItem("lumiere_hero_title3", "Para Você");
+  const heroSub = safeStorage.getItem("lumiere_hero_sub", "Conforto e elegância em cada passo.");
+  const heroImgUrl = safeStorage.getItem("lumiere_hero_img", "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&q=90");
 
   const t1El = document.getElementById("heroTitleLine1");
   const t2El = document.getElementById("heroTitleLine2");
@@ -1150,9 +1197,9 @@ function aplicarConfiguracoesLoja(): void {
     }
   }
 
-  const statClientes = localStorage.getItem("lumiere_stat_clientes") || "2400";
-  const statSatisfacao = localStorage.getItem("lumiere_stat_satisfacao") || "98";
-  const statModelos = localStorage.getItem("lumiere_stat_modelos") || "80";
+  const statClientes = safeStorage.getItem("lumiere_stat_clientes", "2400");
+  const statSatisfacao = safeStorage.getItem("lumiere_stat_satisfacao", "98");
+  const statModelos = safeStorage.getItem("lumiere_stat_modelos", "80");
 
   const stats = document.querySelectorAll(".stat-n");
   if (stats.length >= 3) {
@@ -1168,53 +1215,130 @@ document.addEventListener("click", (e) => {
   if (!target) return;
   const link = target.closest("a");
   if (link && link.href && link.href.includes("wa.me")) {
-    let clicks = parseInt(localStorage.getItem("lumiere_clicks_wa") || "0");
-    localStorage.setItem("lumiere_clicks_wa", (clicks + 1).toString());
+    let clicks = parseInt(safeStorage.getItem("lumiere_clicks_wa", "0"), 10);
+    safeStorage.setItem("lumiere_clicks_wa", (clicks + 1).toString());
   }
 });
 
 // ==== INICIALIZACAO ====
-async function init(): Promise<void> {
-  showLoader();
-  await syncSupabaseData();
-  aplicarConfiguracoesLoja();
-
-  if (!sessionStorage.getItem("lumiere_session_active")) {
-    sessionStorage.setItem("lumiere_session_active", "true");
+// ==== CARREGAMENTO LOCAL (INSTANTÂNEO) ====
+function loadLocalData(): void {
+  const localProd = safeStorage.getItem("lumiere_produtos");
+  PRODUTOS.length = 0;
+  if (localProd) {
     try {
-      if (supabase) {
-        await supabase.rpc('increment_visits');
-      } else {
-        let v = parseInt(localStorage.getItem("lumiere_visitas") || "0");
-        localStorage.setItem("lumiere_visitas", (v + 1).toString());
-      }
-    } catch (e) {
-      console.error("Erro ao incrementar visitas no Supabase:", e);
+      const parsed = JSON.parse(localProd);
+      const produtosFormatados = parsed.map((p: any) => ({
+        ...p,
+        preco: typeof p.preco === "number" ? p.preco : parseFloat(p.preco) || 0,
+        precoOld: p.precoOld ? (typeof p.precoOld === "number" ? p.precoOld : parseFloat(p.precoOld) || null) : null
+      }));
+      PRODUTOS.push(...produtosFormatados);
+    } catch (err) {
+      PRODUTOS.push(...PRODUTOS_PADRAO);
     }
+  } else {
+    PRODUTOS.push(...PRODUTOS_PADRAO);
   }
 
-  initTheme();
-  const yr = document.getElementById("year");
-  if (yr) yr.textContent = new Date().getFullYear().toString();
+  WHATSAPP_NUMBER = safeStorage.getItem("lumiere_whatsapp", "556899408384");
+}
 
-  document.querySelectorAll('a[href*="wa.me"]').forEach(a => {
+// ==== INICIALIZACAO ====
+async function init(): Promise<void> {
+  showLoader();
+  try {
+    // 1. Carrega dados e configurações do cache local imediatamente para exibição rápida
+    loadLocalData();
+    aplicarConfiguracoesLoja();
+    initTheme();
+
+    const yr = document.getElementById("year");
+    if (yr) yr.textContent = new Date().getFullYear().toString();
+
+    atualizarContador();
+    renderHome();
+
+    initScrollReveal();
+    initHeroCanvas();
+    initStatCounters();
+    initSwipeBack();
+
+    setTimeout(updateAnimatedTabs, 100);
+
+    // Oculta o loader o quanto antes para exibir a página imediatamente
+    hideLoader();
+
+    // 2. Tenta sincronizar com o banco em segundo plano (sem travar a renderização inicial)
+    syncSupabaseData().then(() => {
+      aplicarConfiguracoesLoja();
+      atualizarContador();
+      
+      // Ajusta links de WhatsApp com o número atualizado vindo do banco
+      document.querySelectorAll('a[href*="wa.me"]').forEach(a => {
+        try {
+          const anchor = a as HTMLAnchorElement;
+          const url = new URL(anchor.href);
+          anchor.href = `https://wa.me/${WHATSAPP_NUMBER}${url.search}`;
+        } catch(e) {}
+      });
+
+      if (paginaAtual === "home") {
+        renderHome();
+      } else if (paginaAtual === "produtos") {
+        renderProdutos();
+      } else if (paginaAtual === "carrinho") {
+        renderCarrinho();
+      } else if (paginaAtual === "detalhe" && produtoAtual) {
+        const updatedProd = PRODUTOS.find(p => p.id === produtoAtual!.id);
+        if (updatedProd) {
+          produtoAtual = updatedProd;
+          renderDetalhe();
+        }
+      }
+    }).catch(err => {
+      console.warn("Erro ao sincronizar dados em segundo plano:", err);
+    });
+
+    // Registrar visita da sessão de forma não obstrutiva
+    let sessionActive = false;
     try {
-      const anchor = a as HTMLAnchorElement;
-      const url = new URL(anchor.href);
-      anchor.href = `https://wa.me/${WHATSAPP_NUMBER}${url.search}`;
+      sessionActive = !!sessionStorage.getItem("lumiere_session_active");
     } catch(e) {}
-  });
 
-  atualizarContador();
-  renderHome();
+    if (!sessionActive) {
+      try {
+        sessionStorage.setItem("lumiere_session_active", "true");
+      } catch(e) {}
 
-  initScrollReveal();
-  initHeroCanvas();
-  initStatCounters();
-  initSwipeBack();
+      (async () => {
+        try {
+          if (supabase) {
+            await supabase.rpc('increment_visits');
+          } else {
+            let v = parseInt(safeStorage.getItem("lumiere_visitas", "0"), 10);
+            safeStorage.setItem("lumiere_visitas", (v + 1).toString());
+          }
+        } catch (e) {
+          console.error("Erro ao incrementar visitas no Supabase:", e);
+        }
+      })();
+    }
 
-  setTimeout(updateAnimatedTabs, 100);
-  hideLoader();
+  } catch (err) {
+    console.error("Erro critico na inicializacao:", err);
+    try {
+      loadLocalData();
+      aplicarConfiguracoesLoja();
+      initTheme();
+      atualizarContador();
+      renderHome();
+      document.querySelectorAll(".reveal").forEach(el => el.classList.add("visible"));
+    } catch (fallbackErr) {
+      console.error("Erro no fallback de inicializacao:", fallbackErr);
+    }
+    hideLoader();
+  }
 }
 
 // ==== GESTO DE DESLIZAR PARA VOLTAR NO CELULAR ====
@@ -1332,6 +1456,15 @@ function initScrollReveal(): void {
 
   updateReveals();
   window.addEventListener("contentChanged", updateReveals);
+
+  // Fallback de segurança: após 1.2s garante que todos os elementos fiquem visíveis de qualquer forma
+  setTimeout(() => {
+    document.querySelectorAll(".reveal").forEach(el => {
+      if (!el.classList.contains("visible")) {
+        el.classList.add("visible");
+      }
+    });
+  }, 1200);
 }
 
 function initHeroCanvas(): void {
@@ -1436,7 +1569,7 @@ function initStatCounters(): void {
 
 // ==== THEME TOGGLE (Modo Claro / Escuro) ====
 function initTheme(): void {
-  const savedTheme = localStorage.getItem("theme") || "dark";
+  const savedTheme = safeStorage.getItem("theme", "dark");
   if (savedTheme === "light") {
     document.documentElement.classList.add("light");
     document.documentElement.classList.remove("dark");
@@ -1452,7 +1585,9 @@ function toggleTheme(): void {
   const nextTheme = isLight ? "dark" : "light";
 
   document.body.classList.add("theme-transitioning");
-  document.body.getBoundingClientRect();
+  try {
+    document.body.getBoundingClientRect();
+  } catch(e) {}
 
   if (nextTheme === "light") {
     document.documentElement.classList.add("light");
@@ -1462,7 +1597,7 @@ function toggleTheme(): void {
     document.documentElement.classList.remove("light");
   }
 
-  localStorage.setItem("theme", nextTheme);
+  safeStorage.setItem("theme", nextTheme);
   updateToggleIcons(nextTheme);
 
   setTimeout(() => {

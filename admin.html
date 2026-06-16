@@ -6,6 +6,43 @@
       window.location.replace(window.location.href.replace('http:', 'https:'));
     }
   </script>
+  <!-- ===== DEPURADOR DE ERROS EM TELA ===== -->
+  <script>
+    window.addEventListener('error', function (e) {
+      const errDiv = document.createElement('div');
+      errDiv.style.position = 'fixed';
+      errDiv.style.bottom = '10px';
+      errDiv.style.left = '10px';
+      errDiv.style.right = '10px';
+      errDiv.style.background = '#e05252';
+      errDiv.style.color = '#fff';
+      errDiv.style.padding = '10px';
+      errDiv.style.borderRadius = '5px';
+      errDiv.style.zIndex = '999999';
+      errDiv.style.fontSize = '12px';
+      errDiv.style.fontFamily = 'monospace';
+      errDiv.style.boxShadow = '0 4px 10px rgba(0,0,0,0.5)';
+      errDiv.innerHTML = '<strong>Erro de Script:</strong> ' + e.message + '<br><small>' + e.filename + ':' + e.lineno + '</small>';
+      document.body.appendChild(errDiv);
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      const errDiv = document.createElement('div');
+      errDiv.style.position = 'fixed';
+      errDiv.style.bottom = '80px';
+      errDiv.style.left = '10px';
+      errDiv.style.right = '10px';
+      errDiv.style.background = '#ff7846';
+      errDiv.style.color = '#fff';
+      errDiv.style.padding = '10px';
+      errDiv.style.borderRadius = '5px';
+      errDiv.style.zIndex = '999999';
+      errDiv.style.fontSize = '12px';
+      errDiv.style.fontFamily = 'monospace';
+      errDiv.style.boxShadow = '0 4px 10px rgba(0,0,0,0.5)';
+      errDiv.innerHTML = '<strong>Rejeição Promessa:</strong> ' + e.reason;
+      document.body.appendChild(errDiv);
+    });
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lumière — Painel Administrativo Visual</title>
@@ -1083,10 +1120,36 @@
   </script>
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="script.js?v=5"></script>
+  <script src="script.js?v=6"></script>
   
   <script>
     const supabase = window.supabase;
+
+    // ==== CONTROLE SEGURO DE LOCALSTORAGE ====
+    const safeStorage = {
+      getItem(key, fallback = "") {
+        try {
+          return localStorage.getItem(key) || fallback;
+        } catch (e) {
+          console.warn("Storage bloqueado/indisponível:", e);
+          return fallback;
+        }
+      },
+      setItem(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch (e) {
+          console.warn("Storage bloqueado/indisponível para salvar:", e);
+        }
+      },
+      removeItem(key) {
+        try {
+          localStorage.removeItem(key);
+        } catch (e) {
+          console.warn("Storage bloqueado/indisponível para remover:", e);
+        }
+      }
+    };
 
     // ==== USUÁRIO E SENHA PADRÃO ====
     const CREDENCIAIS = {
@@ -1186,8 +1249,8 @@
         if (typeof hideLoader === 'function') hideLoader();
       }
 
-      const visitas = parseInt(localStorage.getItem("lumiere_visitas") || "0");
-      const clicks = parseInt(localStorage.getItem("lumiere_clicks_wa") || "0");
+      const visitas = parseInt(safeStorage.getItem("lumiere_visitas", "0"), 10);
+      const clicks = parseInt(safeStorage.getItem("lumiere_clicks_wa", "0"), 10);
       const conversao = visitas > 0 ? Math.round((clicks / visitas) * 100) : 0;
 
       document.getElementById("barVisitas").textContent = visitas.toLocaleString();
@@ -1210,7 +1273,7 @@
     // Garantir que os botões de edição inline continuem visíveis e funcionais
     function rebindAdminControls() {
       // Forçar recarregamento das métricas no site se alterado
-      const nomeLoja = localStorage.getItem("lumiere_nome") || "Lumière";
+      const nomeLoja = safeStorage.getItem("lumiere_nome", "Lumière");
       document.querySelectorAll(".admin-bar-brand span:first-child").forEach(el => {
         el.textContent = nomeLoja;
       });
@@ -1232,33 +1295,33 @@
     // ==== MODAL CONFIGURAÇÕES GERAIS ====
     function abrirModalConfig(tabFoco) {
       // Preencher campos gerais
-      document.getElementById("configNome").value = localStorage.getItem("lumiere_nome") || "Lumière";
-      document.getElementById("configWhatsapp").value = localStorage.getItem("lumiere_whatsapp") || "556899408384";
-      document.getElementById("configInstagram").value = localStorage.getItem("lumiere_instagram") || "@lumiere.shoes";
-      document.getElementById("configEmail").value = localStorage.getItem("lumiere_email") || "kaelvorastudios2026@gmail.com";
+      document.getElementById("configNome").value = safeStorage.getItem("lumiere_nome", "Lumière");
+      document.getElementById("configWhatsapp").value = safeStorage.getItem("lumiere_whatsapp", "556899408384");
+      document.getElementById("configInstagram").value = safeStorage.getItem("lumiere_instagram", "@lumiere.shoes");
+      document.getElementById("configEmail").value = safeStorage.getItem("lumiere_email", "kaelvorastudios2026@gmail.com");
       
       // Hero stats
-      document.getElementById("configStatClientes").value = localStorage.getItem("lumiere_stat_clientes") || "2400";
-      document.getElementById("configStatSatisfacao").value = localStorage.getItem("lumiere_stat_satisfacao") || "98";
-      document.getElementById("configStatModelos").value = localStorage.getItem("lumiere_stat_modelos") || "80";
+      document.getElementById("configStatClientes").value = safeStorage.getItem("lumiere_stat_clientes", "2400");
+      document.getElementById("configStatSatisfacao").value = safeStorage.getItem("lumiere_stat_satisfacao", "98");
+      document.getElementById("configStatModelos").value = safeStorage.getItem("lumiere_stat_modelos", "80");
 
       // Hero content
-      document.getElementById("configHeroT1").value = localStorage.getItem("lumiere_hero_title1") || "O Sapato";
-      document.getElementById("configHeroT2").value = localStorage.getItem("lumiere_hero_title2") || "Perfeito";
-      document.getElementById("configHeroT3").value = localStorage.getItem("lumiere_hero_title3") || "Para Você.";
-      document.getElementById("configHeroSub").value = localStorage.getItem("lumiere_hero_sub") || "Modelos exclusivos selecionados para quem não abre mão de estilo, conforto e atitude.";
+      document.getElementById("configHeroT1").value = safeStorage.getItem("lumiere_hero_title1", "O Sapato");
+      document.getElementById("configHeroT2").value = safeStorage.getItem("lumiere_hero_title2", "Perfeito");
+      document.getElementById("configHeroT3").value = safeStorage.getItem("lumiere_hero_title3", "Para Você.");
+      document.getElementById("configHeroSub").value = safeStorage.getItem("lumiere_hero_sub", "Modelos exclusivos selecionados para quem não abre mão de estilo, conforto e atitude.");
       
-      const imgUrl = localStorage.getItem("lumiere_hero_img") || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&q=90";
+      const imgUrl = safeStorage.getItem("lumiere_hero_img", "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&q=90");
       document.getElementById("configHeroImgUrl").value = imgUrl;
       
       // Mostrar preview do hero
       mostrarHeroImgPreview(imgUrl);
 
       // Aparência
-      const customGold = localStorage.getItem("lumiere_color_gold") || "#c9a84c";
-      const customGold2 = localStorage.getItem("lumiere_color_gold2") || "#e8c96b";
-      const logoSize = localStorage.getItem("lumiere_logo_size") || "1.8";
-      const heroTitleSize = localStorage.getItem("lumiere_hero_title_size") || "5.5";
+      const customGold = safeStorage.getItem("lumiere_color_gold", "#c9a84c");
+      const customGold2 = safeStorage.getItem("lumiere_color_gold2", "#e8c96b");
+      const logoSize = safeStorage.getItem("lumiere_logo_size", "1.8");
+      const heroTitleSize = safeStorage.getItem("lumiere_hero_title_size", "5.5");
 
       document.getElementById("configColorGold").value = customGold;
       document.getElementById("configColorGoldHex").value = customGold;
@@ -1396,49 +1459,51 @@
       const heroTitleSize = document.getElementById("configHeroTitleSize").value;
 
       try {
-        const { error } = await supabase
-          .from('configuracoes')
-          .update({
-            nome,
-            whatsapp,
-            instagram,
-            email,
-            stat_clientes: clientes,
-            stat_satisfacao: satisfacao,
-            stat_modelos: modelos,
-            hero_title1: heroT1,
-            hero_title2: heroT2,
-            hero_title3: heroT3,
-            hero_sub: heroSub,
-            hero_img: heroImg,
-            color_gold: customGold,
-            color_gold2: customGold2,
-            logo_size: logoSize,
-            hero_title_size: heroTitleSize
-          })
-          .eq('id', 1);
+        if (supabase) {
+          const { error } = await supabase
+            .from('configuracoes')
+            .update({
+              nome,
+              whatsapp,
+              instagram,
+              email,
+              stat_clientes: clientes,
+              stat_satisfacao: satisfacao,
+              stat_modelos: modelos,
+              hero_title1: heroT1,
+              hero_title2: heroT2,
+              hero_title3: heroT3,
+              hero_sub: heroSub,
+              hero_img: heroImg,
+              color_gold: customGold,
+              color_gold2: customGold2,
+              logo_size: logoSize,
+              hero_title_size: heroTitleSize
+            })
+            .eq('id', 1);
 
-        if (error) throw error;
+          if (error) throw error;
+        }
 
-        localStorage.setItem("lumiere_nome", nome);
-        localStorage.setItem("lumiere_whatsapp", whatsapp);
-        localStorage.setItem("lumiere_instagram", instagram);
-        localStorage.setItem("lumiere_email", email);
+        safeStorage.setItem("lumiere_nome", nome);
+        safeStorage.setItem("lumiere_whatsapp", whatsapp);
+        safeStorage.setItem("lumiere_instagram", instagram);
+        safeStorage.setItem("lumiere_email", email);
         
-        localStorage.setItem("lumiere_stat_clientes", clientes);
-        localStorage.setItem("lumiere_stat_satisfacao", satisfacao);
-        localStorage.setItem("lumiere_stat_modelos", modelos);
+        safeStorage.setItem("lumiere_stat_clientes", clientes);
+        safeStorage.setItem("lumiere_stat_satisfacao", satisfacao);
+        safeStorage.setItem("lumiere_stat_modelos", modelos);
 
-        localStorage.setItem("lumiere_hero_title1", heroT1);
-        localStorage.setItem("lumiere_hero_title2", heroT2);
-        localStorage.setItem("lumiere_hero_title3", heroT3);
-        localStorage.setItem("lumiere_hero_sub", heroSub);
-        localStorage.setItem("lumiere_hero_img", heroImg);
+        safeStorage.setItem("lumiere_hero_title1", heroT1);
+        safeStorage.setItem("lumiere_hero_title2", heroT2);
+        safeStorage.setItem("lumiere_hero_title3", heroT3);
+        safeStorage.setItem("lumiere_hero_sub", heroSub);
+        safeStorage.setItem("lumiere_hero_img", heroImg);
 
-        localStorage.setItem("lumiere_color_gold", customGold);
-        localStorage.setItem("lumiere_color_gold2", customGold2);
-        localStorage.setItem("lumiere_logo_size", logoSize);
-        localStorage.setItem("lumiere_hero_title_size", heroTitleSize);
+        safeStorage.setItem("lumiere_color_gold", customGold);
+        safeStorage.setItem("lumiere_color_gold2", customGold2);
+        safeStorage.setItem("lumiere_logo_size", logoSize);
+        safeStorage.setItem("lumiere_hero_title_size", heroTitleSize);
 
         // Re-atualizar o site local
         if (typeof aplicarConfiguracoesLoja === 'function') aplicarConfiguracoesLoja();
@@ -1696,27 +1761,27 @@
         if (idx !== -1) {
           // Manter estado de destaque original
           destaque = PRODUTOS[idx].destaque;
+            try {
+        let savedProduct = null;
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('produtos')
+            .upsert(produtoObjeto)
+            .select();
+
+          if (error) throw error;
+          if (!data || data.length === 0) throw new Error("Nenhum dado retornado do Supabase.");
+          savedProduct = data[0];
+        } else {
+          // Fallback Local
+          if (idVal) {
+            savedProduct = { ...produtoObjeto, id: parseInt(idVal, 10) };
+          } else {
+            // Gerar id incremental local
+            const maxId = PRODUTOS.reduce((max, p) => p.id > max ? p.id : max, 0);
+            savedProduct = { ...produtoObjeto, id: maxId + 1 };
+          }
         }
-      }
-      
-      const produtoObjeto = {
-        nome, categoria, genero, preco, precoOld, desc, tamanhos, cores, material, garantia, peso, imgs, promo, tag, tagLabel, destaque
-      };
-
-      if (idVal) {
-        produtoObjeto.id = parseInt(idVal, 10);
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('produtos')
-          .upsert(produtoObjeto)
-          .select();
-
-        if (error) throw error;
-        if (!data || data.length === 0) throw new Error("Nenhum dado retornado do Supabase.");
-
-        const savedProduct = data[0];
 
         if (idVal) {
           const idx = PRODUTOS.findIndex(x => x.id === savedProduct.id);
@@ -1729,7 +1794,7 @@
         
         salvarEAtualizarCatalogo();
         fecharModalAdmin();
-        alert("Sapato salvo com sucesso no Supabase! 👟");
+        alert("Sapato salvo com sucesso! 👟");
       } catch (err) {
         console.error("Erro ao salvar produto no Supabase:", err);
         alert("Erro ao salvar produto no banco de dados.");
@@ -1742,12 +1807,14 @@
       if (!confirm("Confirmar exclusão definitiva deste sapato?")) return;
       if (typeof showLoader === 'function') showLoader();
       try {
-        const { error } = await supabase
-          .from('produtos')
-          .delete()
-          .eq('id', id);
+        if (supabase) {
+          const { error } = await supabase
+            .from('produtos')
+            .delete()
+            .eq('id', id);
 
-        if (error) throw error;
+          if (error) throw error;
+        }
 
         PRODUTOS = PRODUTOS.filter(p => p.id !== id);
         window.PRODUTOS = PRODUTOS;
@@ -1762,7 +1829,7 @@
     }
 
     function salvarEAtualizarCatalogo() {
-      localStorage.setItem("lumiere_produtos", JSON.stringify(PRODUTOS));
+      safeStorage.setItem("lumiere_produtos", JSON.stringify(PRODUTOS));
       
       // Recarregar os produtos na tela principal chamando as funções do script.js
       if (typeof renderHome === "function") renderHome();
@@ -1774,18 +1841,28 @@
     }
 
     async function restaurarPadrao() {
-      if (!confirm("Isso apagará todos os seus sapatos customizados e restaurará os originais no Supabase. Confirmar?")) return;
+      if (!confirm("Isso apagará todos os seus sapatos customizados e restaurará os originais. Confirmar?")) return;
       if (typeof showLoader === 'function') showLoader();
       try {
-        const { error: deleteError } = await supabase
-          .from('produtos')
-          .delete()
-          .neq('id', 0);
+        if (supabase) {
+          const { error: deleteError } = await supabase
+            .from('produtos')
+            .delete()
+            .neq('id', 0);
 
-        if (deleteError) throw deleteError;
+          if (deleteError) throw deleteError;
 
-        const { error: insertError } = await supabase
-          .from('produtos')
+          const { error: insertError } = await supabase
+            .from('produtos')
+            .insert(window.PRODUTOS_PADRAO);
+
+          if (insertError) throw insertError;
+        }
+
+        PRODUTOS.length = 0;
+        PRODUTOS.push(...window.PRODUTOS_PADRAO);
+        salvarEAtualizarCatalogo();
+        alert("Sapatos originais restaurados com sucesso! 🔄"); .from('produtos')
           .insert(window.PRODUTOS_PADRAO);
 
         if (insertError) throw insertError;

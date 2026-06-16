@@ -6,6 +6,43 @@
       window.location.replace(window.location.href.replace('http:', 'https:'));
     }
   </script>
+  <!-- ===== DEPURADOR DE ERROS EM TELA ===== -->
+  <script>
+    window.addEventListener('error', function (e) {
+      const errDiv = document.createElement('div');
+      errDiv.style.position = 'fixed';
+      errDiv.style.bottom = '10px';
+      errDiv.style.left = '10px';
+      errDiv.style.right = '10px';
+      errDiv.style.background = '#e05252';
+      errDiv.style.color = '#fff';
+      errDiv.style.padding = '10px';
+      errDiv.style.borderRadius = '5px';
+      errDiv.style.zIndex = '999999';
+      errDiv.style.fontSize = '12px';
+      errDiv.style.fontFamily = 'monospace';
+      errDiv.style.boxShadow = '0 4px 10px rgba(0,0,0,0.5)';
+      errDiv.innerHTML = '<strong>Erro de Script:</strong> ' + e.message + '<br><small>' + e.filename + ':' + e.lineno + '</small>';
+      document.body.appendChild(errDiv);
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      const errDiv = document.createElement('div');
+      errDiv.style.position = 'fixed';
+      errDiv.style.bottom = '80px';
+      errDiv.style.left = '10px';
+      errDiv.style.right = '10px';
+      errDiv.style.background = '#ff7846';
+      errDiv.style.color = '#fff';
+      errDiv.style.padding = '10px';
+      errDiv.style.borderRadius = '5px';
+      errDiv.style.zIndex = '999999';
+      errDiv.style.fontSize = '12px';
+      errDiv.style.fontFamily = 'monospace';
+      errDiv.style.boxShadow = '0 4px 10px rgba(0,0,0,0.5)';
+      errDiv.innerHTML = '<strong>Rejeição Promessa:</strong> ' + e.reason;
+      document.body.appendChild(errDiv);
+    });
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lumière — Sapatos de Luxo</title>
@@ -427,7 +464,7 @@
 
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="script.js?v=5"></script>
+  <script src="script.js?v=6"></script>
 
   <!-- ===== PROTEÇÃO ANTI-INSPEÇÃO E CÓPIA ===== -->
   <script>
