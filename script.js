@@ -27,18 +27,19 @@ const safeStorage = {
 // ==== CONFIGURAÇÃO DO SUPABASE ====
 const supabaseUrl = "https://ggiiabscngwlqrqdaufd.supabase.co";
 const supabaseKey = "sb_publishable_mzsBserUpdNdOl9u1g-ruw_2roY_UXE";
-let supabase = null;
+let _sbClient = null;
 
-if (typeof window !== "undefined" && window.supabase && typeof window.supabase.createClient === "function") {
-  try {
-    supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-    window.supabaseClient = supabase; // Exportar globalmente SEM sobrescrever o SDK
-  } catch (err) {
-    console.error("Erro ao criar o cliente Supabase:", err);
+try {
+  if (typeof window !== "undefined" && window.supabase && typeof window.supabase.createClient === "function") {
+    _sbClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+    window.supabaseClient = _sbClient;
+  } else {
+    console.warn("Supabase SDK não carregado. Modo offline ativado.");
   }
-} else {
-  console.warn("Supabase SDK não está carregado. O site funcionará no modo local (offline).");
+} catch (err) {
+  console.error("Erro ao criar cliente Supabase:", err);
 }
+
 
 // ==== DADOS DOS PRODUTOS PADRÃO ====
 const PRODUTOS_PADRAO = [
@@ -271,7 +272,7 @@ let paginaHistorico = [];
 // ==== SINCRONIZAÇÃO SUPABASE ====
 async function seedDefaultProducts() {
   try {
-    const { error } = await supabase.from('produtos').insert(PRODUTOS_PADRAO);
+    const { error } = await _sbClient.from('produtos').insert(PRODUTOS_PADRAO);
     if (error) throw error;
     PRODUTOS.push(...PRODUTOS_PADRAO);
   } catch (e) {
@@ -281,7 +282,7 @@ async function seedDefaultProducts() {
 
 async function syncSupabaseData() {
   try {
-    if (!supabase) {
+    if (!_sbClient) {
       console.warn("Sem conexão com o Supabase. Carregando dados locais...");
       const localProd = safeStorage.getItem("lumiere_produtos");
       PRODUTOS.length = 0;
@@ -304,7 +305,7 @@ async function syncSupabaseData() {
     }
 
     // 1. Buscar sapatos
-    const { data: prodData, error: prodError } = await supabase
+    const { data: prodData, error: prodError } = await _sbClient
       .from('produtos')
       .select('*')
       .order('id', { ascending: true });
@@ -325,7 +326,7 @@ async function syncSupabaseData() {
     }
 
     // 2. Buscar configurações (ID = 1)
-    const { data: configData, error: configError } = await supabase
+    const { data: configData, error: configError } = await _sbClient
       .from('configuracoes')
       .select('*')
       .eq('id', 1)
@@ -685,13 +686,13 @@ async function enviarWhatsApp(origem) {
 
   showLoader();
   try {
-    if (supabase) {
+    if (_sbClient) {
       // Incrementar cliques de WhatsApp no Supabase
-      await supabase.rpc('increment_clicks');
+      await _sbClient.rpc('increment_clicks');
 
       // Incrementar vendas no Supabase
       for (const item of carrinho) {
-        await supabase.rpc('increment_product_sales', { prod_id: item.produtoId, qty: item.qty });
+        await _sbClient.rpc('increment_product_sales', { prod_id: item.produtoId, qty: item.qty });
       }
     } else {
       let clicks = parseInt(safeStorage.getItem("lumiere_clicks_wa", "0"), 10);
@@ -1247,8 +1248,8 @@ async function init() {
 
       (async () => {
         try {
-          if (supabase) {
-            await supabase.rpc('increment_visits');
+          if (_sbClient) {
+            await _sbClient.rpc('increment_visits');
           } else {
             let v = parseInt(safeStorage.getItem("lumiere_visitas", "0"), 10);
             safeStorage.setItem("lumiere_visitas", (v + 1).toString());
