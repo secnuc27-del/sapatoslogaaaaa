@@ -1717,7 +1717,6 @@
       let imgs = document.getElementById("prodImgs").value.split("\n").map(x => x.trim()).filter(Boolean);
       
       if (!imgs.length) {
-        // Imagem padrão luxuosa
         imgs = ["https://images.unsplash.com/photo-1549298916-b41d501d3772?w=900&q=80"];
       }
 
@@ -1730,19 +1729,27 @@
         tagLabel = `−${desconto}%`;
       }
       
+      // Manter estado de destaque original se editando
       let destaque = false;
       if (idVal) {
         const numericId = parseInt(idVal, 10);
-        const idx = PRODUTOS.findIndex(x => x.id === numericId);
-        if (idx !== -1) {
-          // Manter estado de destaque original
-          destaque = PRODUTOS[idx].destaque;
-            try {
+        const existente = PRODUTOS.find(x => x.id === numericId);
+        if (existente) destaque = existente.destaque;
+      }
+
+      const produtoObjeto = {
+        nome, categoria, genero, preco, precoOld, desc,
+        tamanhos, cores, material, garantia, peso, imgs,
+        promo, tag, tagLabel, destaque, sales: 0
+      };
+
+      try {
         let savedProduct = null;
+
         if (_adminSb) {
           const { data, error } = await _adminSb
             .from('produtos')
-            .upsert(produtoObjeto)
+            .upsert(idVal ? { ...produtoObjeto, id: parseInt(idVal, 10) } : produtoObjeto)
             .select();
 
           if (error) throw error;
@@ -1753,7 +1760,6 @@
           if (idVal) {
             savedProduct = { ...produtoObjeto, id: parseInt(idVal, 10) };
           } else {
-            // Gerar id incremental local
             const maxId = PRODUTOS.reduce((max, p) => p.id > max ? p.id : max, 0);
             savedProduct = { ...produtoObjeto, id: maxId + 1 };
           }
@@ -1763,6 +1769,8 @@
           const idx = PRODUTOS.findIndex(x => x.id === savedProduct.id);
           if (idx !== -1) {
             PRODUTOS[idx] = savedProduct;
+          } else {
+            PRODUTOS.push(savedProduct);
           }
         } else {
           PRODUTOS.push(savedProduct);
@@ -1772,7 +1780,7 @@
         fecharModalAdmin();
         alert("Sapato salvo com sucesso! 👟");
       } catch (err) {
-        console.error("Erro ao salvar produto no Supabase:", err);
+        console.error("Erro ao salvar produto:", err);
         alert("Erro ao salvar produto no banco de dados.");
       } finally {
         if (typeof hideLoader === 'function') hideLoader();
