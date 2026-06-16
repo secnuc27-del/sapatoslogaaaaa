@@ -1869,10 +1869,15 @@
           if (insertError) throw insertError;
         }
 
+        // Atualizar o array local e o localStorage (mandatório!)
+        PRODUTOS = [...window.PRODUTOS_PADRAO];
+        window.PRODUTOS = PRODUTOS;
+        salvarEAtualizarCatalogo();
+
         alert("Sapatos originais restaurados com sucesso! 🔄");
       } catch (err) {
         console.error("Erro ao restaurar padrões no Supabase:", err);
-        alert("Erro ao restaurar padrões no banco de dados.");
+        alert("Erro ao restaurar padrões: " + (err.message || JSON.stringify(err)));
       } finally {
         if (typeof hideLoader === 'function') hideLoader();
       }
