@@ -1859,17 +1859,6 @@
           if (insertError) throw insertError;
         }
 
-        PRODUTOS.length = 0;
-        PRODUTOS.push(...window.PRODUTOS_PADRAO);
-        salvarEAtualizarCatalogo();
-        alert("Sapatos originais restaurados com sucesso! 🔄"); .from('produtos')
-          .insert(window.PRODUTOS_PADRAO);
-
-        if (insertError) throw insertError;
-
-        PRODUTOS.length = 0;
-        PRODUTOS.push(...window.PRODUTOS_PADRAO);
-        salvarEAtualizarCatalogo();
         alert("Sapatos originais restaurados com sucesso! 🔄");
       } catch (err) {
         console.error("Erro ao restaurar padrões no Supabase:", err);

@@ -11,5 +11,6 @@
     "allowJs": true,
     "outDir": "."
   },
-  "include": ["script.ts"]
+  "include": ["script.ts"],
+  "exclude": ["script.js", "node_modules"]
 }
