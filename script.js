@@ -29,10 +29,10 @@ const supabaseUrl = "https://ggiiabscngwlqrqdaufd.supabase.co";
 const supabaseKey = "sb_publishable_mzsBserUpdNdOl9u1g-ruw_2roY_UXE";
 let supabase = null;
 
-if (typeof window !== "undefined" && window.supabase) {
+if (typeof window !== "undefined" && window.supabase && typeof window.supabase.createClient === "function") {
   try {
     supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-    window.supabase = supabase; // Exportar globalmente para o admin.html usar
+    window.supabaseClient = supabase; // Exportar globalmente SEM sobrescrever o SDK
   } catch (err) {
     console.error("Erro ao criar o cliente Supabase:", err);
   }
@@ -1186,6 +1186,11 @@ async function init() {
     const yr = document.getElementById("year");
     if (yr) yr.textContent = new Date().getFullYear().toString();
 
+    // Garante que a página home está ativa
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    const homeEl = document.getElementById("page-home");
+    if (homeEl) homeEl.classList.add("active");
+
     atualizarContador();
     renderHome();
 
@@ -1258,13 +1263,22 @@ async function init() {
     console.error("Erro critico na inicializacao:", err);
     try {
       loadLocalData();
-      aplicarConfiguracoesLoja();
-      initTheme();
+      try { aplicarConfiguracoesLoja(); } catch(e) {}
+      try { initTheme(); } catch(e) {}
       atualizarContador();
+      // Garante que a página home esteja visível mesmo em caso de erro
+      document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+      const homeEl2 = document.getElementById("page-home");
+      if (homeEl2) homeEl2.classList.add("active");
       renderHome();
       document.querySelectorAll(".reveal").forEach(el => el.classList.add("visible"));
     } catch (fallbackErr) {
       console.error("Erro no fallback de inicializacao:", fallbackErr);
+      // Último recurso: tornar tudo visível
+      document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+      const homeEl3 = document.getElementById("page-home");
+      if (homeEl3) homeEl3.classList.add("active");
+      document.querySelectorAll(".reveal").forEach(el => el.classList.add("visible"));
     }
     hideLoader();
   }
@@ -1548,7 +1562,28 @@ function updateToggleIcons(theme) {
 window.toggleTheme = toggleTheme;
 
 document.addEventListener("DOMContentLoaded", () => {
-  init().catch(err => console.error("Erro na inicializacao:", err));
+  // Safety timeout: força visibilidade após 3s caso init() falhe silenciosamente
+  const safetyTimer = setTimeout(() => {
+    const loader = document.getElementById("lumiere-loader");
+    if (loader && loader.classList.contains("active")) {
+      console.warn("Safety timeout: forçando visibilidade da página.");
+      loader.classList.remove("active");
+      document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+      const homeEl = document.getElementById("page-home");
+      if (homeEl) homeEl.classList.add("active");
+      document.querySelectorAll(".reveal").forEach(el => el.classList.add("visible"));
+      if (!window.PRODUTOS || window.PRODUTOS.length === 0) {
+        window.PRODUTOS = window.PRODUTOS || [];
+        window.PRODUTOS.push(...window.PRODUTOS_PADRAO);
+      }
+      try { renderHome(); } catch(e) {}
+    }
+  }, 3000);
+
+  init().then(() => clearTimeout(safetyTimer)).catch(err => {
+    clearTimeout(safetyTimer);
+    console.error("Erro na inicializacao:", err);
+  });
 });
 
 // ==== MODAIS INSTITUCIONAIS ====
