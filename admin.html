@@ -1913,7 +1913,7 @@
 
       // 2. Bloquear atalhos de teclado (Windows, Linux, macOS)
       document.addEventListener('keydown', function (e) {
-        const key = e.key.toLowerCase();
+        const key = (e.key || '').toLowerCase();
         const ctrl = e.ctrlKey || e.metaKey; // Ctrl (Win) ou Cmd (Mac)
         const shift = e.shiftKey;
         const alt = e.altKey; // Option (Mac)
